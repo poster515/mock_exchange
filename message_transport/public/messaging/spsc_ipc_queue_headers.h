@@ -20,12 +20,12 @@ namespace message_transport {
     const uint8_t MESSAGE_SKIPPED = 0x01; // used as bookend when there is no room at end of queue and we must start at beginning
     const uint8_t MESSAGE_COMMITTED = 0x02; // indicates that the message has been fully written and is ready for the consumer to read
     const uint8_t MESSAGE_ACQUIRED = 0x04; // indicates that the consumer has acquired the message for reading, used for synchronization between producer and consumer
-    const uint8_t MESSAGE_READ = 0x08; // indicates that the consumer has finished reading the message, used for synchronization between producer and consumer
+    const uint8_t MESSAGE_LEASED = 0x08; // indicates that the producer has checked out a buffer space for writing, but has not actually committed any data yet
 
     // inserted before each message in the queue to manage the state of that message and provide metadata about the message.
-    struct MessageHeader {
-        uint64_t message_size; // Size of the message payload
-        uint8_t flags; // Flags for message metadata
+    alignas(64) struct MessageHeader {
+        std::atomic<uint32_t> message_size; // Size of the message payload
+        std::atomic<uint8_t> flags; // Flags for message metadata
     };
 
 #pragma pack(pop)
