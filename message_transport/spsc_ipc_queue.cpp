@@ -36,8 +36,6 @@ namespace message_transport {
 
         if (is_writer) {
             // if we're the writer, we need to initialize the global header to set the initial state of the queue.
-            global_header->read_offset.store(0, std::memory_order_relaxed);
-            global_header->write_offset.store(0, std::memory_order_release);
             global_header->queue_size_bytes.store(queue_size_bytes, std::memory_order_relaxed);
             global_header->message_count.store(0, std::memory_order_relaxed);
             global_header->has_writer.store(true, std::memory_order_release);
@@ -63,27 +61,75 @@ namespace message_transport {
         
         // determine a starting point in the shared memory for the producer to write the message, 
         // and return a wrapper that will commit the buffer to the queue upon destruction.
+        if (size > queue_size_bytes) {
+            // Message size exceeds the total queue capacity, cannot claim buffer
+            return SpscIpcQueueRaiiWrapper(nullptr, 0, *this);
+        }
 
         // need to get the actual current read offset of the reader, this may increment but we 
         // need to do this with memory_order_acquire to ensure we see the latest value written by the reader.
         size_t current_read_offset = global_header->read_offset.load(std::memory_order_acquire);
 
         // can do a relaxed load here since we only care about the current write offset for calculating the
-        // buffer position, and we will ensure proper synchronization when committing the buffer.
+        // buffer position, and we will ensure proper synchronization when committing the buffer. Also,
+        // since we are currently the only writer this thread is the only writing thread.
         size_t current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
-        if (size > queue_size_bytes) {
-            // Message size exceeds the total queue capacity, cannot claim buffer
-            return SpscIpcQueueRaiiWrapper(nullptr, size, *this);
-        }
 
+        // TODO: when we go to a multi-producer paradigm, we'll need to make this an atomic compare_exchange loop
+        // to ensure that only one producer can claim a given buffer space, but since this is single-producer we
+        // can just calculate the buffer position based on the current write offset and the size of the message.
         if (size <= (queue_size_bytes - current_write_offset)) {
             void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + sizeof(GlobalHeader) + current_write_offset);
+            auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
+            message_header->message_size.store(size, std::memory_order_release); // for now stick with relased here, may be able to relax this later.
+            message_header->flags.store(MESSAGE_LEASED, std::memory_order_release);
+
+            // have to increment the write offset in the global header to reflect the fact that we've claimed this buffer
+            // space for writing, we can do this with a relaxed store since the write offset is only used by the producer
+            // to calculate buffer positions and is not used for synchronization with the consumer.
+            global_header->write_offset.store(current_write_offset + sizeof(MessageHeader) + size, std::memory_order_release);
             return SpscIpcQueueRaiiWrapper(buffer_ptr, current_write_offset, *this);
         }
 
-        // Calculate the starting position for the buffer within shared memory
-        size_t buffer_start_offset = current_write_offset % queue_size_bytes;
+        // if there's no room at the end of the queue for this message, we need to write a "skipped" message header to indicate
+        // to the consumer that it should skip over this space and then wrap around to the beginning of the queue to write the
+        // message there. This is necessary to ensure that the consumer can correctly read messages from the queue without getting
+        // confused by unused space at the end of the queue.
+        void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + sizeof(GlobalHeader) + current_write_offset);
+        auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
+        message_header->message_size.store(0, std::memory_order_relaxed); // might be able to remove atomic from this field entirely
+        message_header->flags.store(MESSAGE_SKIPPED, std::memory_order_release);
 
-        return SpscIpcQueueRaiiWrapper(nullptr, size, *this);
+        // now try and claim the buffer at the beginning of the queue for this message, we can be assured that this will succeed since the maximum message size is less than the total queue capacity, so there must be room at the beginning of the queue for this message.
+        auto* new_message_header = static_cast<MessageHeader*>(static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + sizeof(GlobalHeader)));
+        while (new_message_header->flags.load(std::memory_order_acquire) != MESSAGE_AVAILABLE) {
+            std::this_thread::yield();
+        }
+        new_message_header->message_size.store(size, std::memory_order_release);
+        new_message_header->flags.store(MESSAGE_LEASED, std::memory_order_release);
+        return SpscIpcQueueRaiiWrapper(buffer_ptr, size, *this);
+    }
+
+    std::optional<SpscIpcQueueRaiiWrapper> SpscIpcQueue::poll_buffer() {
+        // TODO: poll the queue for new messages, if a new message is available, return a wrapper around the message
+        // buffer for the consumer to read from. If no new messages are available, return immediately.
+
+        if (is_writer) {
+            throw std::runtime_error("Producer cannot poll for messages in the queue");
+        }
+
+        size_t current_read_offset = global_header->read_offset.load(std::memory_order_acquire);
+
+        void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + sizeof(GlobalHeader) + current_read_offset);
+        auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
+        if (message_header->flags.load(std::memory_order_acquire) == MESSAGE_AVAILABLE) {
+            global_header->read_offset.store(current_read_offset + sizeof(MessageHeader) + message_header->message_size.load(std::memory_order_acquire), std::memory_order_release);
+            return SpscIpcQueueRaiiWrapper(buffer_ptr, message_header->message_size.load(std::memory_order_acquire), *this);
+        }
+        return std::nullopt;
+    }
+
+    void SpscIpcQueue::read_buffer() {
+
     }
 }

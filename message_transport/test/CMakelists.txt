@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.10)
+project(message_transport_tests)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Find GTest
+find_package(GTest REQUIRED)
+
+# Add test executable
+add_executable(message_transport_tests
+    # Add your test source files here
+    # example: test_example.cpp
+    spsc_ipc_queue_test.cpp
+)
+
+# Link against gtest and main library
+target_link_libraries(message_transport_tests
+    GTest::gtest
+    GTest::gtest_main
+)
+
+# Enable testing
+enable_testing()
+add_test(NAME MessageTransportTests COMMAND message_transport_tests)

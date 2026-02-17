@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string_view>
+#include <optional>
 
 #include "messaging/spsc_ipc_queue_headers.h"
 
@@ -32,13 +33,14 @@ namespace message_transport {
         // returned wrapper, the buffer will be committed to the queue.
         SpscIpcQueueRaiiWrapper claim_buffer(size_t size);
 
+        // public API that exposes a single, non-blocking call for the consumer to poll for new messages in the queue.
+        // This method will return immediately if there are no new messages available, and will return a wrapper around 
+        // the message buffer if a new message is available for the consumer to read.
+        std::optional<SpscIpcQueueRaiiWrapper> poll_buffer();
+
     private:
 
-        friend struct SpscIpcQueueRaiiWrapper;
-
-        void commit_buffer(void* buffer, size_t total_size);
-
-        // whether this instance is a writer or reader, used for managing the state of the
+        // whether this instance is the writer or reader, used for managing the state of the
         // shared memory and ensuring proper synchronization between producer and consumer.
         // not super happy with this, but it'll help do some stupid sanity checks on startup.
         bool is_writer;
@@ -49,5 +51,13 @@ namespace message_transport {
 
         // grab and/or set the state of the shared memory region
         message_transport::GlobalHeader* global_header;
-    };
+
+        // if the queue owner is the reader this can optionally be looped forever, reading messages
+        // as they become available in the queue, and then processing them using some user-provided callback function.
+        void read_buffer();
+
+        // TODO: implement a callback_model concept and establish ownership semantics for the queue that allow us to
+        // have multiple producers and/or consumers, and to allow producers and consumers to dynamically join and leave
+        // the queue without disrupting the overall communication between other producers and consumers that are still active in the queue.
+};
 }
