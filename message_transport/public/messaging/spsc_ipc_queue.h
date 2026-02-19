@@ -5,6 +5,8 @@
 
 #include "messaging/spsc_ipc_queue_headers.h"
 
+using namespace std::chrono_literals;
+
 namespace message_transport {
 
     // forward decl
@@ -21,17 +23,23 @@ namespace message_transport {
      * This class will support arbitrary message sizes and will handle synchronization internally to ensure safe communication between the producer and consumer.
      * 
      * The implementation will use shared memory and synchronization primitives to achieve efficient communication without busy-waiting.
+     * 
+     * TODO: This implementation could benefit from a "hot swap" clean buffer/dirty buffer paradigm. Probably not a huge deal
+     * to leave as is for now but its something worth investigating at some point.
      */
     class SpscIpcQueue {
 
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
+        static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
     public:
         SpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, bool is_writer);
         ~SpscIpcQueue();
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 
         // returned wrapper, the buffer will be committed to the queue.
-        SpscIpcQueueRaiiWrapper claim_buffer(size_t size);
+        std::optional<SpscIpcQueueRaiiWrapper> blocking_claim_buffer(size_t size);
+
+        std::optional<SpscIpcQueueRaiiWrapper> nonblocking_claim_buffer(size_t size);
 
         // public API that exposes a single, non-blocking call for the consumer to poll for new messages in the queue.
         // This method will return immediately if there are no new messages available, and will return a wrapper around 
@@ -59,5 +67,9 @@ namespace message_transport {
         // TODO: implement a callback_model concept and establish ownership semantics for the queue that allow us to
         // have multiple producers and/or consumers, and to allow producers and consumers to dynamically join and leave
         // the queue without disrupting the overall communication between other producers and consumers that are still active in the queue.
+        
+        // waits for the current slot to become available, either because its been read or because the region is skipped from a pervious iteration.
+        // Returns the number of application bytes that were stored in the slot.
+        size_t wait_for_slot_until(const MessageHeader& header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT);
 };
 }
