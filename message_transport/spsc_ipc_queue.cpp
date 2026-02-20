@@ -57,74 +57,61 @@ namespace message_transport {
         // Destructor implementation
     }
 
-    std::optional<SpscIpcQueueRaiiWrapper> SpscIpcQueue::blocking_claim_buffer(size_t size) {
+    SpscIpcQueueRaiiWrapper SpscIpcQueue::blocking_claim_buffer(size_t size) {
         
         // determine a starting point in the shared memory for the producer to write the message, 
         // and return a wrapper that will commit the buffer to the queue upon destruction.
         if (size > (queue_size_bytes - sizeof(GlobalHeader)) - sizeof(MessageHeader)) {
             // Message size exceeds the total queue capacity, cannot claim buffer
-            return std::nullopt;
+            throw std::runtime_error(std::format("Message size {} bytes exceeds the total queue capacity of {} bytes", size, queue_size_bytes - sizeof(GlobalHeader)));
         }
 
-        // need to get the actual current read offset of the reader, this may increment but we 
-        // need to do this with memory_order_acquire to ensure we see the latest value written by the reader.
-        size_t current_read_offset = global_header->read_offset.load(std::memory_order_acquire);
+        uint64_t current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
+        uint64_t new_write_offset = current_write_offset + sizeof(MessageHeader) + size;
 
-        // can do a relaxed load here since we only care about the current write offset for calculating the
-        // buffer position, and we will ensure proper synchronization when committing the buffer. Also,
-        // since we are currently the only writer this thread is the only writing thread.
-        // TODO: once we move to a multi-producer architecture - THIS MUST USE CAS SEMANTICS
-        size_t current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
-        const size_t max_user_payload_bytes = queue_size_bytes - current_write_offset - sizeof(MessageHeader);
+        bool insert_skip_message_at_current = false;
 
-        // get the current buffer pointer using this offset
-        void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + sizeof(GlobalHeader) + current_write_offset);
-        auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
-
-        // TODO: when we go to a multi-producer paradigm, we'll need to make this an atomic compare_exchange loop
-        // to ensure that only one producer can claim a given buffer space, but since this is single-producer we
-        // can just calculate the buffer position based on the current write offset and the size of the message.
-        if (size <= max_user_payload_bytes) {
-            message_header->message_size.store(size, std::memory_order_release); // for now stick with relased here, may be able to relax this later.
-            message_header->flags.store(MESSAGE_LEASED, std::memory_order_release); // set this last, its used to determine availability of this chunk by others
-
-            // have to increment the write offset in the global header to reflect the fact that we've claimed this buffer
-            // space for writing, we can do this with a relaxed store since the write offset is only used by the producer
-            // to calculate buffer positions and is not used for synchronization with the consumer.
-            global_header->write_offset.store(current_write_offset + sizeof(MessageHeader) + size, std::memory_order_release);
-            return SpscIpcQueueRaiiWrapper(buffer_ptr, size, *this);
+        if (new_write_offset >= queue_size_bytes) {
+            new_write_offset = sizeof(GlobalHeader);
+            insert_skip_message_at_current = true;
         }
 
-        // if there's no room at the end of the queue for this message, we need to write a "skipped" message header to indicate
-        // to the consumer that it should skip over this space and then wrap around to the beginning of the queue to write the
-        // message there. This is necessary to ensure that the consumer can correctly read messages from the queue without getting
-        // confused by unused space at the end of the queue.
-        message_header->message_size.store(max_user_payload_bytes, std::memory_order_relaxed); // might be able to remove atomic from this field entirely
-        message_header->flags.store(MESSAGE_SKIPPED, std::memory_order_release);
+        // TODO: we need to make sure this current_write_offset is not in a region that is currently being read by the reader
+        while(!global_header->write_offset.compare_exchange_weak(current_write_offset, new_write_offset, std::memory_order_release, std::memory_order_relaxed)) {
+            // if this compare fails, we _might_ have lost the lock on the current writable region, or it might be a spurious failure.
+            // Try again.
+            current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
+            new_write_offset = current_write_offset + sizeof(MessageHeader) + size;
 
-        // now try and claim the buffer at the beginning of the queue for this message, we can be assured that this will succeed since the maximum message size is less than the total queue capacity, so there must be room at the beginning of the queue for this message.
-        void* new_buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + sizeof(GlobalHeader));
+            if (new_write_offset >= queue_size_bytes) {
+                new_write_offset = sizeof(GlobalHeader);
+                insert_skip_message_at_current = true;
+            } else {
+                insert_skip_message_at_current = false;
+            }
+        }
+
+        if (insert_skip_message_at_current) {
+            void* buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
+            auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
+            insert_skip_message(*message_header, queue_size_bytes - current_write_offset - sizeof(MessageHeader));
+
+            // if we had to insert a skip message, bad luck! we'll recurse and try to claim again.
+            // TODO: not a big deal of the recursion idea but logically its correct. Naybe I break this out into a separate function.
+            return blocking_claim_buffer(size);
+        }
+
+        // ok now we have a slot for writing. Try and block to write in at current_write_offset
+        void* new_buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
         auto* new_message_header = static_cast<MessageHeader*>(new_buffer_ptr);
-        size_t total_available_buffer_space = 0;
 
-        // wait for the slot to become available at all
-        total_available_buffer_space += wait_for_slot_until(*new_message_header);
+        // make sure we aren't overwriting any bytes in a region being read by a slow reader
+        // TODO: there is a corner case here where we catch up _exactly_ to the reader and need to wait
+        wait_for_slot_until(current_write_offset, size);
 
-        while (total_available_buffer_space < size) {
-            // advance to the next message header
-            new_buffer_ptr = static_cast<void*>(static_cast<char*>(new_buffer_ptr) + sizeof(MessageHeader) + new_message_header->message_size.load(std::memory_order_relaxed));
-            new_message_header = static_cast<MessageHeader*>(new_buffer_ptr);
-
-            // wait for the slot to become available at all
-            total_available_buffer_space += wait_for_slot_until(*new_message_header) + sizeof(MessageHeader);
-        }
-
-        new_message_header->message_size.store(size, std::memory_order_release);
         new_message_header->flags.store(MESSAGE_LEASED, std::memory_order_release);
-
-        // finally, we have to "reset" the write offset to the next wrapped position
-        global_header->write_offset.store(sizeof(GlobalHeader) + sizeof(MessageHeader) + size, std::memory_order_release);
-        return SpscIpcQueueRaiiWrapper(buffer_ptr, size, *this);
+        new_message_header->message_size.store(size, std::memory_order_relaxed);
+        return SpscIpcQueueRaiiWrapper(new_buffer_ptr, size, *this);
     }
 
 
@@ -152,18 +139,38 @@ namespace message_transport {
     }
 
     void SpscIpcQueue::read_buffer() {
+        const auto current_read_offset = global_header->read_offset.load(std::memory_order_acquire);
+        const auto current_message_position = sizeof(GlobalHeader) + current_read_offset;
+        const auto current_message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + current_message_position);
+        
+        // TODO: dispatch message to consumer at some point here.
 
-    }
-
-    size_t SpscIpcQueue::wait_for_slot_until(const MessageHeader& header, std::chrono::nanoseconds timeout) {
-        auto start_time = std::chrono::steady_clock::now();
-        while (header.flags.load(std::memory_order_acquire) > MESSAGE_SKIPPED) {
-            if (std::chrono::steady_clock::now() - start_time > timeout) {
-                throw std::runtime_error("Timeout while waiting for buffer slot to be released");
-            }
-            std::this_thread::sleep_for(std::chrono::nanoseconds(50));
+        // since we are the only reader we can safely increment the reader offset
+        const auto next_read_offset = current_read_offset + sizeof(MessageHeader) + current_message_header->message_size.load(std::memory_order_acquire);
+        const auto& header_at_next_read_offset = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + next_read_offset);
+        if (header_at_next_read_offset.flags.load(std::memory_order_acquire) == MESSAGE_SKIPPED) {
+            // if the next message is a skip message, we need to skip over it and move the read offset to the next message after the skip message.
+            global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
+        } else {
+            global_header->read_offset.store(next_read_offset, std::memory_order_release);
         }
 
-        return header.message_size.load(std::memory_order_relaxed);
+        // finally, mark as available
+        current_message_header->flags.store(MESSAGE_AVAILABLE, std::memory_order_release);
+    }
+
+    void SpscIpcQueue::insert_skip_message(MessageHeader& header, size_t padded_bytes) {
+        const auto current_read_offset = global_header->read_offset.load(std::memory_order_acquire);
+        const auto current_skip_message_position = std::distance(reinterpret_cast<uint8_t*>(global_header), reinterpret_cast<uint8_t*>(&header));
+        
+        // make sure the reader is out of our way
+        wait_for_slot_until(current_skip_message_position, padded_bytes);
+
+        header.message_size.store(padded_bytes, std::memory_order_release);
+        header.flags.store(MESSAGE_SKIPPED, std::memory_order_release);
+
+        // be nice and set these to 0
+        auto* message_payload = static_cast<void*>(reinterpret_cast<uint8_t*>(&header) + sizeof(MessageHeader));
+        std::memset(message_payload, 0, padded_bytes);
     }
 }

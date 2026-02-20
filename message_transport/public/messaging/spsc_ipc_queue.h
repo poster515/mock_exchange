@@ -37,7 +37,7 @@ namespace message_transport {
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 
         // returned wrapper, the buffer will be committed to the queue.
-        std::optional<SpscIpcQueueRaiiWrapper> blocking_claim_buffer(size_t size);
+        SpscIpcQueueRaiiWrapper blocking_claim_buffer(size_t size);
 
         std::optional<SpscIpcQueueRaiiWrapper> nonblocking_claim_buffer(size_t size);
 
@@ -70,6 +70,19 @@ namespace message_transport {
         
         // waits for the current slot to become available, either because its been read or because the region is skipped from a pervious iteration.
         // Returns the number of application bytes that were stored in the slot.
-        size_t wait_for_slot_until(const MessageHeader& header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT);
+        inline void wait_for_slot_until(const uint64_t write_offset, const size_t size, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
+            // basically just need the read_offset of the current reader to be outside the range of this write region
+            for (uint64_t read_offset = global_header->read_offset.load(std::memory_order_acquire);
+                    write_offset <= read_offset && read_offset < size;) {
+
+                const auto& header = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + sizeof(GlobalHeader) + read_offset);
+                if (header.flags.load(std::memory_order_acquire) == MESSAGE_AVAILABLE) {
+                    break;
+                }
+                std::this_thread::sleep_for(timeout);
+            }
+        }
+
+        void insert_skip_message(MessageHeader& header, size_t padded_bytes);
 };
 }
