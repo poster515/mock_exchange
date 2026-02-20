@@ -7,9 +7,10 @@ namespace message_transport {
 
     // global header structure that will be placed at the beginning of the shared memory region
     // to manage the state of the queue.
+    // TODO: do we event need the message count?
     struct GlobalHeader {
-        alignas(64) std::atomic<uint64_t> write_offset;
-        alignas(64) std::atomic<uint64_t> read_offset;
+        alignas(64) std::atomic<uint64_t> write_offset; // offset from the beginning of the raw mapped memory region to the next available buffer region for writing
+        alignas(64) std::atomic<uint64_t> read_offset;  // offset from the beginning of the raw mapped memory region to the next available buffer region for reading
         alignas(64) std::atomic<uint64_t> queue_size_bytes; // total size of the queue in bytes, used for managing the shared memory and ensuring messages do not exceed the queue capacity
         alignas(64) std::atomic<uint64_t> message_count; // total number of messages currently in the queue, used for monitoring and debugging purposes
         alignas(64) std::atomic_bool has_writer;
