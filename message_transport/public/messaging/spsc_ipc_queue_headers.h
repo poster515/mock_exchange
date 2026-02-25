@@ -24,7 +24,7 @@ namespace message_transport {
     const uint8_t MESSAGE_LEASED = 0x08; // indicates that the producer has checked out a buffer space for writing, but has not actually committed any data yet
 
     // inserted before each message in the queue to manage the state of that message and provide metadata about the message.
-    alignas(64) struct MessageHeader {
+    struct alignas(64) MessageHeader {
         std::atomic<uint32_t> message_size; // Size of the message payload EXCLUDING the size of this message header
         std::atomic<uint8_t> flags; // Flags for message metadata
     };

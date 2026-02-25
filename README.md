@@ -23,12 +23,15 @@ Client Gateways → Sequencer → Matching Engine → Market Data Gateway
 
 ## Getting Started
 
+I'm using cmake 4.2 and conan2 for this project. Here is the setup for in-tree builds:
+
 ```bash
 mkdir -p build
-cd build
-cmake ..
-make
+conan install . --output-folder build --build=missing
+cmake -B build/build/Debug -DCMAKE_TOOLCHAIN_FILE=./build/build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug .
 ```
+
+Obviously you'll want to confirm your choice of build type and folder location, but these will get you started.
 
 ## Testing & Scenarios
 

@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 project(message_transport_tests)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find GTest
-find_package(GTest REQUIRED)
+find_package(GTest REQUIRED CONFIG)
 
 # Add test executable
 add_executable(message_transport_tests
@@ -16,6 +16,7 @@ add_executable(message_transport_tests
 
 # Link against gtest and main library
 target_link_libraries(message_transport_tests
+    messaging
     GTest::gtest
     GTest::gtest_main
 )

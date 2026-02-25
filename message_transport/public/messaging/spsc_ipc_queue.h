@@ -2,15 +2,17 @@
 
 #include <string_view>
 #include <optional>
+#include <functional>
+#include <thread>
 
-#include "messaging/spsc_ipc_queue_headers.h"
+#include "spsc_ipc_queue_headers.h"
 
 using namespace std::chrono_literals;
 
 namespace message_transport {
 
     // forward decl
-    struct SpscIpcQueueRaiiWrapper;
+    class SpscIpcQueueRaiiWrapper;
 
     // some checkers for safety
     // static_assert(std::atomic<uint64_t>::is_always_lock_free);
@@ -32,7 +34,8 @@ namespace message_transport {
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
         static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
     public:
-        SpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, bool is_writer);
+        using CallbackModel = std::function<void(SpscIpcQueueRaiiWrapper)>;
+        SpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, std::optional<CallbackModel> callback = std::nullopt);
         ~SpscIpcQueue();
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 
@@ -60,6 +63,8 @@ namespace message_transport {
         // grab and/or set the state of the shared memory region
         message_transport::GlobalHeader* global_header;
 
+        std::optional<CallbackModel> dispatcher;
+
         // if the queue owner is the reader this can optionally be looped forever, reading messages
         // as they become available in the queue, and then processing them using some user-provided callback function.
         void read_buffer();
@@ -72,11 +77,11 @@ namespace message_transport {
         // Returns the number of application bytes that were stored in the slot.
         inline void wait_for_slot_until(const uint64_t write_offset, const size_t size, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
             // basically just need the read_offset of the current reader to be outside the range of this write region
-            for (uint64_t read_offset = global_header->read_offset.load(std::memory_order_acquire);
+            for (uint64_t read_offset = global_header->read_offset.load(std::memory_order_relaxed);
                     write_offset <= read_offset && read_offset < size;) {
 
-                const auto& header = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + sizeof(GlobalHeader) + read_offset);
-                if (header.flags.load(std::memory_order_acquire) == MESSAGE_AVAILABLE) {
+                const auto& header = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_offset);
+                if (header.flags.load(std::memory_order_relaxed) == MESSAGE_AVAILABLE) {
                     break;
                 }
                 std::this_thread::sleep_for(timeout);

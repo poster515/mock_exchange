@@ -6,8 +6,8 @@
 #include <cstring>
 #include <sys/mman.h>
 
-#include "messaging/spsc_ipc_queue.h"
-#include "messaging/spsc_ipc_queue_element_wrapper.h"
+#include "spsc_ipc_queue.h"
+#include "spsc_ipc_queue_element_wrapper.h"
 
 using namespace message_transport;
 
@@ -26,16 +26,16 @@ protected:
 };
 
 TEST_F(SpscIpcQueueTest, BasicWriteAndRead) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, true);
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, false);
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
 
     const char* test_data = "Hello, World!";
     size_t data_size = strlen(test_data) + 1;
 
-    auto wrapper = writer.claim_buffer(data_size);
+    auto wrapper = writer.blocking_claim_buffer(data_size);
     ASSERT_NE(wrapper.get_buffer(), nullptr);
-    wrapper.write_to_buffer(test_data, data_size);
+    wrapper.write_to_buffer(test_data);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
@@ -45,16 +45,16 @@ TEST_F(SpscIpcQueueTest, BasicWriteAndRead) {
 }
 
 TEST_F(SpscIpcQueueTest, MultipleMessagesSequential) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, true);
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, false);
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
 
     std::vector<std::string> messages = {"msg1", "msg2", "msg3"};
 
     for (const auto& msg : messages) {
-        auto wrapper = writer.claim_buffer(msg.size() + 1);
+        auto wrapper = writer.blocking_claim_buffer(msg.size() + 1);
         ASSERT_NE(wrapper.get_buffer(), nullptr);
-        wrapper.write_to_buffer(msg.c_str(), msg.size() + 1);
+        wrapper.write_to_buffer(msg.c_str());
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
@@ -66,18 +66,18 @@ TEST_F(SpscIpcQueueTest, MultipleMessagesSequential) {
 }
 
 TEST_F(SpscIpcQueueTest, SlowProducerFastConsumer) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, true);
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, false);
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
 
     std::vector<int> written_values;
     std::vector<int> read_values;
 
     auto producer = [&writer, &written_values]() {
         for (int i = 0; i < 10; ++i) {
-            auto wrapper = writer.claim_buffer(sizeof(int));
+            auto wrapper = writer.blocking_claim_buffer(sizeof(int));
             ASSERT_NE(wrapper.get_buffer(), nullptr);
-            wrapper.write_to_buffer(reinterpret_cast<const char*>(&i), sizeof(int));
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&i));
             // wrapper.commit(); // commit is now handled by the destructor of the wrapper, so we don't need to call it explicitly here.
             written_values.push_back(i);
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -109,9 +109,9 @@ TEST_F(SpscIpcQueueTest, SlowProducerFastConsumer) {
 }
 
 TEST_F(SpscIpcQueueTest, FastProducerSlowConsumer) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, true);
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, false);
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
 
     std::vector<int> written_values;
     std::vector<int> read_values;
@@ -119,9 +119,9 @@ TEST_F(SpscIpcQueueTest, FastProducerSlowConsumer) {
 
     auto producer = [&writer, &written_values, &values_mutex]() {
         for (int i = 0; i < 20; ++i) {
-            auto wrapper = writer.claim_buffer(sizeof(int));
+            auto wrapper = writer.blocking_claim_buffer(sizeof(int));
             if (wrapper.get_buffer() != nullptr) {
-                wrapper.write_to_buffer(reinterpret_cast<const char*>(&i), sizeof(int));
+                wrapper.write_to_buffer(reinterpret_cast<const char*>(&i));
                 {
                     std::lock_guard<std::mutex> lock(values_mutex);
                     written_values.push_back(i);
@@ -161,9 +161,9 @@ TEST_F(SpscIpcQueueTest, FastProducerSlowConsumer) {
 }
 
 TEST_F(SpscIpcQueueTest, QueueWrapAround) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, true);
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, false);
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
 
     const size_t msg_size = 128;
     const int num_messages = 40;
@@ -172,9 +172,9 @@ TEST_F(SpscIpcQueueTest, QueueWrapAround) {
 
     auto producer = [&writer, &written_values, msg_size, num_messages]() {
         for (int i = 0; i < num_messages; ++i) {
-            auto wrapper = writer.claim_buffer(msg_size);
+            auto wrapper = writer.blocking_claim_buffer(msg_size);
             if (wrapper.get_buffer() != nullptr) {
-                wrapper.write_to_buffer(reinterpret_cast<const char*>(&i), sizeof(int));
+                wrapper.write_to_buffer(reinterpret_cast<const char*>(&i));
                 written_values.push_back(i);
             }
         }
@@ -207,30 +207,29 @@ TEST_F(SpscIpcQueueTest, QueueWrapAround) {
 }
 
 TEST_F(SpscIpcQueueTest, ExceedQueueCapacity) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, true);
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
 
-    auto wrapper = writer.claim_buffer(QUEUE_SIZE + 1);
+    auto wrapper = writer.blocking_claim_buffer(QUEUE_SIZE + 1);
     EXPECT_EQ(wrapper.get_buffer(), nullptr);
 }
 
 TEST_F(SpscIpcQueueTest, ReaderCannotClaim) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, true);
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, false);
-
-    EXPECT_THROW(reader.claim_buffer(64), std::runtime_error);
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    EXPECT_THROW(reader.blocking_claim_buffer(64), std::runtime_error);
 }
 
 TEST_F(SpscIpcQueueTest, WriterCannotPoll) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, true);
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
 
     EXPECT_THROW(writer.poll_buffer(), std::runtime_error);
 }
 
 TEST_F(SpscIpcQueueTest, LargeMessageSequence) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, true);
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, false);
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
 
     const size_t large_msg_size = 512;
     std::vector<std::vector<char>> written_data;
@@ -239,9 +238,9 @@ TEST_F(SpscIpcQueueTest, LargeMessageSequence) {
     auto producer = [&writer, &written_data, large_msg_size]() {
         for (int i = 0; i < 5; ++i) {
             std::vector<char> data(large_msg_size, static_cast<char>(i));
-            auto wrapper = writer.claim_buffer(large_msg_size);
+            auto wrapper = writer.blocking_claim_buffer(large_msg_size);
             if (wrapper.get_buffer() != nullptr) {
-                wrapper.write_to_buffer(data.data(), large_msg_size);
+                wrapper.write_to_buffer(data.data());
                 written_data.push_back(data);
             }
         }

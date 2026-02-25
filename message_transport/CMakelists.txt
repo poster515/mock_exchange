@@ -1,16 +1,18 @@
 cmake_minimum_required(VERSION 3.10)
-project(message_transport)
+project(messaging)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/public/messaging)
 
 # Library
-add_library(message_transport SHARED
-    src/shared_memory_queue.cpp
+add_library(messaging SHARED
+    ${PUBLIC_INCLUDE_DIR}/spsc_ipc_queue.h
+    spsc_ipc_queue.cpp
 )
 
-target_include_directories(message_transport PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+target_include_directories(messaging PUBLIC
+    ${PUBLIC_INCLUDE_DIR}
 )
 
 # Unit Tests
