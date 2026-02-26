@@ -18,7 +18,7 @@ namespace message_transport {
             throw std::runtime_error("Queue size exceeds maximum allowed size of " + std::to_string(MAX_QUEUE_SIZE_BYTES) + " bytes");
         }
 
-        int fd = shm_open(shm_file_name.data(), O_CREAT | O_RDWR, 0666);
+        fd = shm_open(shm_file_name.data(), O_CREAT | O_RDWR, 0666);
 
         if (fd == -1) {
             throw std::runtime_error("Failed to open shared memory at file " + std::string(shm_file_name));
@@ -40,6 +40,9 @@ namespace message_transport {
             global_header->queue_size_bytes.store(queue_size_bytes, std::memory_order_relaxed);
             global_header->message_count.store(0, std::memory_order_relaxed);
             global_header->has_writer.store(true, std::memory_order_release);
+
+            global_header->write_offset.store(sizeof(GlobalHeader), std::memory_order_release);
+            global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
         } else {
             // TODO: I want to think about what this should do for the reader.
             //      I think I'd prefer to set a "is_initalized" flag that we check and then
@@ -55,7 +58,8 @@ namespace message_transport {
     }
 
     SpscIpcQueue::~SpscIpcQueue() {
-        // Destructor implementation
+        munmap(global_header, queue_size_bytes);
+        close(fd);
     }
 
     SpscIpcQueueRaiiWrapper SpscIpcQueue::blocking_claim_buffer(size_t size) {
@@ -66,9 +70,9 @@ namespace message_transport {
             // Message size exceeds the total queue capacity, cannot claim buffer
             throw std::runtime_error(std::format("Message size {} bytes exceeds the total queue capacity of {} bytes", size, queue_size_bytes - sizeof(GlobalHeader)));
         }
-
+        const auto size_required = size + sizeof(MessageHeader);
         uint64_t current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
-        uint64_t new_write_offset = current_write_offset + sizeof(MessageHeader) + size;
+        uint64_t new_write_offset = current_write_offset + size_required;
 
         bool insert_skip_message_at_current = false;
 
@@ -81,7 +85,7 @@ namespace message_transport {
             // if this compare fails, we _might_ have lost the lock on the current writable region, or it might be a spurious failure.
             // Try again.
             current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
-            new_write_offset = current_write_offset + sizeof(MessageHeader) + size;
+            new_write_offset = current_write_offset + size_required;
 
             if (new_write_offset >= queue_size_bytes) {
                 new_write_offset = sizeof(GlobalHeader);
@@ -102,7 +106,7 @@ namespace message_transport {
         }
 
         // make sure we aren't overwriting any bytes in a region being read by a slow reader
-        wait_for_slot_until(current_write_offset, size);
+        wait_for_slot_until(current_write_offset, size_required);
 
         // ok now we have a slot for writing. Try and block to write in at current_write_offset
         void* new_buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
@@ -110,7 +114,7 @@ namespace message_transport {
 
         new_message_header->message_size.store(size, std::memory_order_relaxed);
         new_message_header->flags.store(MESSAGE_LEASED, std::memory_order_release);
-        return SpscIpcQueueRaiiWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size, *this);
+        return SpscIpcQueueRaiiWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
     }
 
 
@@ -130,10 +134,10 @@ namespace message_transport {
 
         void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + current_read_offset);
         auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
-        if (message_header->flags.load(std::memory_order_acquire) == MESSAGE_AVAILABLE) {
+        if (message_header->flags.load(std::memory_order_acquire) == MESSAGE_COMMITTED) {
             const auto message_len = message_header->message_size.load(std::memory_order_relaxed) + sizeof(MessageHeader);
             global_header->read_offset.store(current_read_offset + message_len, std::memory_order_release);
-            return SpscIpcQueueRaiiWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), message_len, *this);
+            return SpscIpcQueueRaiiWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), message_len);
         }
         return std::nullopt;
     }

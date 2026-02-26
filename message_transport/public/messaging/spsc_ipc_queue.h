@@ -65,6 +65,8 @@ namespace message_transport {
 
         std::optional<CallbackModel> dispatcher;
 
+        int fd;
+
         // if the queue owner is the reader this can optionally be looped forever, reading messages
         // as they become available in the queue, and then processing them using some user-provided callback function.
         void read_buffer();

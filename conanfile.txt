@@ -1,5 +1,6 @@
 [requires]
 gtest/1.17.0
+magic_enum/0.9.7
 
 [generators]
 CMakeDeps

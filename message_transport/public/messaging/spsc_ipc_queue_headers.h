@@ -8,13 +8,14 @@ namespace message_transport {
     // global header structure that will be placed at the beginning of the shared memory region
     // to manage the state of the queue.
     // TODO: do we event need the message count?
+    // TODO: can we better cache align this? Or does it not really matter since we're accessing individual fields atomically.
     struct GlobalHeader {
-        alignas(64) std::atomic<uint64_t> write_offset; // offset from the beginning of the raw mapped memory region to the next available buffer region for writing
-        alignas(64) std::atomic<uint64_t> read_offset;  // offset from the beginning of the raw mapped memory region to the next available buffer region for reading
-        alignas(64) std::atomic<uint64_t> queue_size_bytes; // total size of the queue in bytes, used for managing the shared memory and ensuring messages do not exceed the queue capacity
-        alignas(64) std::atomic<uint64_t> message_count; // total number of messages currently in the queue, used for monitoring and debugging purposes
-        alignas(64) std::atomic_bool has_writer;
-        alignas(64) std::atomic_bool has_reader;
+        std::atomic<uint64_t> write_offset; // offset from the beginning of the raw mapped memory region to the next available buffer region for writing
+        std::atomic<uint64_t> read_offset;  // offset from the beginning of the raw mapped memory region to the next available buffer region for reading
+        std::atomic<uint64_t> queue_size_bytes; // total size of the queue in bytes, used for managing the shared memory and ensuring messages do not exceed the queue capacity
+        std::atomic<uint64_t> message_count; // total number of messages currently in the queue, used for monitoring and debugging purposes
+        std::atomic_bool has_writer;
+        std::atomic_bool has_reader;
     };
 
     const uint8_t MESSAGE_AVAILABLE = 0x00; // buffer space has neither been claimed nor committed, can be claimed by producer
@@ -24,7 +25,7 @@ namespace message_transport {
     const uint8_t MESSAGE_LEASED = 0x08; // indicates that the producer has checked out a buffer space for writing, but has not actually committed any data yet
 
     // inserted before each message in the queue to manage the state of that message and provide metadata about the message.
-    struct alignas(64) MessageHeader {
+    struct MessageHeader {
         std::atomic<uint32_t> message_size; // Size of the message payload EXCLUDING the size of this message header
         std::atomic<uint8_t> flags; // Flags for message metadata
     };
