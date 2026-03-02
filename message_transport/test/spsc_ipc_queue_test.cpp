@@ -4,6 +4,7 @@
 #include <chrono>
 #include <vector>
 #include <cstring>
+#include <ranges>
 #include <sys/mman.h>
 
 #include "spsc_ipc_queue.h"
@@ -106,48 +107,49 @@ TEST_F(SpscIpcQueueTest, MultipleMessagesSequential) {
     }
 }
 
-// TEST_F(SpscIpcQueueTest, SlowProducerFastConsumer) {
-//     SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
-//     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-//     SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+TEST_F(SpscIpcQueueTest, SlowProducerFastConsumer) {
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
 
-//     std::vector<int> written_values;
-//     std::vector<int> read_values;
+    std::vector<int> written_values;
+    std::vector<int> read_values;
 
-//     auto producer = [&writer, &written_values]() {
-//         for (int i = 0; i < 10; ++i) {
-//             auto wrapper = writer.blocking_claim_buffer(sizeof(int));
-//             ASSERT_NE(wrapper.get_buffer(), nullptr);
-//             wrapper.write_to_buffer(reinterpret_cast<const char*>(&i));
-//             // wrapper.commit(); // commit is now handled by the destructor of the wrapper, so we don't need to call it explicitly here.
-//             written_values.push_back(i);
-//             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-//         }
-//     };
+    const auto NUM_MESSAGES = 10;
 
-//     auto consumer = [&reader, &read_values]() {
-//         while (read_values.size() < 10) {
-//             auto wrapper = reader.poll_buffer();
-//             if (wrapper.has_value()) {
-//                 int value;
-//                 std::memcpy(&value, wrapper->get_buffer(), sizeof(int));
-//                 read_values.push_back(value);
-//             }
-//             std::this_thread::sleep_for(std::chrono::milliseconds(5));
-//         }
-//     };
+    auto producer = [&writer, &written_values]() {
+        for (int i : std::ranges::iota_view{0, NUM_MESSAGES}) {
+            auto wrapper = writer.blocking_claim_buffer(sizeof(int));
+            ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&i), sizeof(int)));
+            ASSERT_NE(wrapper.get_buffer(), nullptr);
+            written_values.push_back(i);
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    };
 
-//     std::thread producer_thread(producer);
-//     std::thread consumer_thread(consumer);
+    auto consumer = [&reader, &read_values]() {
+        while (read_values.size() < NUM_MESSAGES) {
+            auto wrapper = reader.poll_buffer();
+            if (wrapper.has_value()) {
+                int value;
+                std::memcpy(&value, wrapper->get_buffer(), sizeof(int));
+                read_values.push_back(value);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    };
 
-//     producer_thread.join();
-//     consumer_thread.join();
+    std::thread producer_thread(producer);
+    std::thread consumer_thread(consumer);
 
-//     EXPECT_EQ(written_values.size(), read_values.size());
-//     for (size_t i = 0; i < written_values.size(); ++i) {
-//         EXPECT_EQ(written_values[i], read_values[i]);
-//     }
-// }
+    producer_thread.join();
+    consumer_thread.join();
+
+    EXPECT_EQ(written_values.size(), read_values.size());
+    for (size_t i = 0; i < written_values.size(); ++i) {
+        EXPECT_EQ(written_values[i], read_values[i]);
+    }
+}
 
 // TEST_F(SpscIpcQueueTest, FastProducerSlowConsumer) {
 //     SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
