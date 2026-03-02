@@ -45,6 +45,44 @@ TEST_F(SpscIpcQueueTest, BasicWriteAndRead) {
     EXPECT_EQ(read_data, test_data);
 }
 
+TEST_F(SpscIpcQueueTest, BasicQueueWrapping) {
+    const size_t SMALL_QUEUE_SIZE = 128;
+    SpscIpcQueue writer(SHM_NAME, SMALL_QUEUE_SIZE, std::nullopt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    SpscIpcQueue reader(SHM_NAME, SMALL_QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+
+    std::string_view message = "this_is_a_long_message";
+    const auto iters_to_fill_buffer = (SMALL_QUEUE_SIZE  - sizeof(message_transport::GlobalHeader)) / message.size();
+
+    for (auto i = 0; i < iters_to_fill_buffer; ++i) {
+        auto wrapper = writer.blocking_claim_buffer(message.size());
+        ASSERT_TRUE(wrapper.write_to_buffer(message.data(), message.size()));
+        ASSERT_NE(wrapper.get_buffer(), nullptr);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    // now the queue is full and we want to make sure the wrapping works correctly
+    // need to consume one message though to free up enough space for a new message at the front
+    auto read_wrapper = reader.poll_buffer();
+    ASSERT_TRUE(read_wrapper.has_value());
+
+    auto read_data = read_wrapper->get_as_view<std::string_view>();
+    EXPECT_EQ(read_data, message);
+
+    // now we can write one more message which should wrap around to the beginning of the queue
+    auto wrapper = writer.blocking_claim_buffer(message.size());
+    ASSERT_TRUE(wrapper.write_to_buffer(message.data(), message.size()));
+    ASSERT_NE(wrapper.get_buffer(), nullptr);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+    // anddddd then read everything we can
+    while (auto read_wrapper = reader.poll_buffer()) {
+        ASSERT_TRUE(read_wrapper.has_value());
+        auto read_data = read_wrapper->get_as_view<std::string_view>();
+        EXPECT_EQ(read_data, message);
+    }
+}
+
 TEST_F(SpscIpcQueueTest, MultipleMessagesSequential) {
     SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
