@@ -151,57 +151,50 @@ TEST_F(SpscIpcQueueTest, SlowProducerFastConsumer) {
     }
 }
 
-// TEST_F(SpscIpcQueueTest, FastProducerSlowConsumer) {
-//     SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
-//     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-//     SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+TEST_F(SpscIpcQueueTest, FastProducerSlowConsumer) {
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
 
-//     std::vector<int> written_values;
-//     std::vector<int> read_values;
-//     std::mutex values_mutex;
+    std::vector<int> written_values;
+    std::vector<int> read_values;
+    std::mutex values_mutex;
 
-//     auto producer = [&writer, &written_values, &values_mutex]() {
-//         for (int i = 0; i < 20; ++i) {
-//             auto wrapper = writer.blocking_claim_buffer(sizeof(int));
-//             if (wrapper.get_buffer() != nullptr) {
-//                 wrapper.write_to_buffer(reinterpret_cast<const char*>(&i));
-//                 {
-//                     std::lock_guard<std::mutex> lock(values_mutex);
-//                     written_values.push_back(i);
-//                 }
-//             }
-//             std::this_thread::sleep_for(std::chrono::milliseconds(2));
-//         }
-//     };
+    const auto NUM_MESSAGES = 10;
 
-//     auto consumer = [&reader, &read_values, &values_mutex]() {
-//         int count = 0;
-//         while (count < 20) {
-//             auto wrapper = reader.poll_buffer();
-//             if (wrapper.has_value()) {
-//                 int value;
-//                 std::memcpy(&value, wrapper->get_buffer(), sizeof(int));
-//                 {
-//                     std::lock_guard<std::mutex> lock(values_mutex);
-//                     read_values.push_back(value);
-//                 }
-//                 count++;
-//             }
-//             std::this_thread::sleep_for(std::chrono::milliseconds(25));
-//         }
-//     };
+    auto producer = [&writer, &written_values]() {
+        for (int i : std::ranges::iota_view{0, NUM_MESSAGES}) {
+            auto wrapper = writer.blocking_claim_buffer(sizeof(int));
+            ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&i), sizeof(int)));
+            ASSERT_NE(wrapper.get_buffer(), nullptr);
+            written_values.push_back(i);
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    };
 
-//     std::thread producer_thread(producer);
-//     std::thread consumer_thread(consumer);
+    auto consumer = [&reader, &read_values]() {
+        while (read_values.size() < NUM_MESSAGES) {
+            auto wrapper = reader.poll_buffer();
+            if (wrapper.has_value()) {
+                int value;
+                std::memcpy(&value, wrapper->get_buffer(), sizeof(int));
+                read_values.push_back(value);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        }
+    };
 
-//     producer_thread.join();
-//     consumer_thread.join();
+    std::thread producer_thread(producer);
+    std::thread consumer_thread(consumer);
 
-//     EXPECT_EQ(written_values.size(), read_values.size());
-//     for (size_t i = 0; i < written_values.size(); ++i) {
-//         EXPECT_EQ(written_values[i], read_values[i]);
-//     }
-// }
+    producer_thread.join();
+    consumer_thread.join();
+
+    EXPECT_EQ(written_values.size(), read_values.size());
+    for (size_t i = 0; i < written_values.size(); ++i) {
+        EXPECT_EQ(written_values[i], read_values[i]);
+    }
+}
 
 // TEST_F(SpscIpcQueueTest, QueueWrapAround) {
 //     SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
