@@ -303,3 +303,63 @@ TEST_F(SpscIpcQueueTest, LargeMessageSequence) {
         EXPECT_EQ(written_data[i], read_data[i]);
     }
 }
+TEST_F(SpscIpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
+    const auto SMALL_QUEUE_SIZE_BYTES = 512;
+    SpscIpcQueue writer(SHM_NAME, SMALL_QUEUE_SIZE_BYTES, std::nullopt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    SpscIpcQueue reader(SHM_NAME, SMALL_QUEUE_SIZE_BYTES, [](SpscIpcQueueRaiiWrapper){});
+
+    struct TestMessage {
+        uint8_t byte_val;
+        uint32_t uint32_val;
+        uint64_t uint64_val;
+        unsigned long long ull_val;
+    };
+
+    std::vector<TestMessage> written_messages;
+    std::vector<TestMessage> read_messages;
+
+    const int NUM_ITERATIONS = 20; // Write enough to cause multiple wraparounds
+
+    auto producer = [&writer, &written_messages]() {
+        for (int i = 0; i < NUM_ITERATIONS; ++i) {
+            TestMessage msg{
+                static_cast<uint8_t>(i % 256),
+                static_cast<uint32_t>(i * 1000),
+                static_cast<uint64_t>(i * 1000000),
+                static_cast<unsigned long long>(i * 9999999)
+            };
+
+            auto wrapper = writer.blocking_claim_buffer(sizeof(TestMessage));
+            ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&msg), sizeof(TestMessage)));
+            written_messages.push_back(msg);
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    };
+
+    auto consumer = [&reader, &read_messages]() {
+        while (read_messages.size() < NUM_ITERATIONS) {
+            auto wrapper = reader.poll_buffer();
+            if (wrapper.has_value()) {
+                TestMessage msg;
+                std::memcpy(&msg, wrapper->get_buffer(), sizeof(TestMessage));
+                read_messages.push_back(msg);
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(3));
+        }
+    };
+
+    std::thread producer_thread(producer);
+    std::thread consumer_thread(consumer);
+
+    producer_thread.join();
+    consumer_thread.join();
+
+    EXPECT_EQ(written_messages.size(), read_messages.size());
+    for (size_t i = 0; i < written_messages.size(); ++i) {
+        EXPECT_EQ(written_messages[i].byte_val, read_messages[i].byte_val);
+        EXPECT_EQ(written_messages[i].uint32_val, read_messages[i].uint32_val);
+        EXPECT_EQ(written_messages[i].uint64_val, read_messages[i].uint64_val);
+        EXPECT_EQ(written_messages[i].ull_val, read_messages[i].ull_val);
+    }
+}
