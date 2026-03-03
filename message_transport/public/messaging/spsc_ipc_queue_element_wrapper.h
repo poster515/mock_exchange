@@ -63,7 +63,7 @@ namespace message_transport {
 
         void release() {
             auto* message_header = reinterpret_cast<MessageHeader*>(wrapper.data());
-            message_header->flags.store(MESSAGE_AVAILABLE, std::memory_order_release);
+            message_header->flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_release);
             released = true;
         }
 
@@ -86,7 +86,7 @@ namespace message_transport {
         // ideally only test function, but you could get cheeky with this.
         [[nodiscard]] const void* get_buffer() const {
             auto* message_header = reinterpret_cast<MessageHeader*>(wrapper.data());
-            if (message_header->flags.load(std::memory_order_acquire) & MESSAGE_COMMITTED) {
+            if (message_header->flags.load(std::memory_order_acquire) & MESSAGE_LEASED_FOR_READ) {
                 return static_cast<void*>(wrapper.data() + sizeof(MessageHeader));
             }
             return nullptr; // message is not available for reading
@@ -112,7 +112,7 @@ namespace message_transport {
         ~SpscIpcQueueRaiiWriterWrapper() {
             // upon destruction of the writer wrapper, we can set the message header flags to indicate that the message is now available for the consumer to read.
             auto* message_header = reinterpret_cast<MessageHeader*>(wrapper.data());
-            message_header->flags.store(MESSAGE_COMMITTED, std::memory_order_release);
+            message_header->flags.store(MESSAGE_AVAILABLE_FOR_READ, std::memory_order_release);
         }
 
         bool write_to_buffer(const char* data, size_t size) {

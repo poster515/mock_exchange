@@ -122,7 +122,7 @@ namespace message_transport {
         const auto old_flags = new_message_header->flags.load(std::memory_order_relaxed);
 
         new_message_header->message_size.store(size, std::memory_order_relaxed);
-        new_message_header->flags.store(MESSAGE_LEASED, std::memory_order_release);
+        new_message_header->flags.store(MESSAGE_LEASED_FOR_WRITE, std::memory_order_release);
          
         {
             std::lock_guard lock(std_cout_mtx);
@@ -146,10 +146,12 @@ namespace message_transport {
         void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + current_read_offset);
         auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
         const auto block_flags = message_header->flags.load(std::memory_order_acquire);
+        const auto total_message_len = message_header->message_size.load(std::memory_order_relaxed) + sizeof(MessageHeader);
+
         switch (block_flags) {
-            case MESSAGE_COMMITTED: {
-                const auto total_message_len = message_header->message_size.load(std::memory_order_relaxed) + sizeof(MessageHeader);
-                global_header->read_offset.store(current_read_offset + total_message_len, std::memory_order_release);
+            case MESSAGE_AVAILABLE_FOR_READ: {
+                // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
+                message_header->flags.store(MESSAGE_LEASED_FOR_READ, std::memory_order_release);
 
                 std::lock_guard lock(std_cout_mtx);
                 std::cout << "Polled message at offset " << current_read_offset << " with size " << message_header->message_size.load(std::memory_order_relaxed) << " bytes (total size with header: " << total_message_len << " bytes)\n";
@@ -158,10 +160,13 @@ namespace message_transport {
             case MESSAGE_SKIPPED: {
                 // this means the producer had to skip this region to wrap around, so we should just move our read offset to the beginning of the queue and try again on the next poll.
                 global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
-                return std::nullopt;
+                return poll_buffer();
             }
-            case MESSAGE_AVAILABLE:
-            case MESSAGE_LEASED:
+            case MESSAGE_AVAILABLE_FOR_WRITE: {
+                // if the reader has polled this again, assume they have read the current slot and are ready to bump the read offset/consume the next message.
+                global_header->read_offset.store(current_read_offset + total_message_len, std::memory_order_release);
+                return poll_buffer();
+            }
             default: {
                 return std::nullopt;
             }
@@ -183,14 +188,14 @@ namespace message_transport {
         auto& header_at_next_read_offset = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + next_read_offset);
         if (header_at_next_read_offset.flags.load(std::memory_order_acquire) == MESSAGE_SKIPPED) {
             // if the next message is a skip message, we need to skip over it and move the read offset to the next message after the skip message.
-            header_at_next_read_offset.flags.store(MESSAGE_AVAILABLE, std::memory_order_relaxed);
+            header_at_next_read_offset.flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_relaxed);
             global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
         } else {
             global_header->read_offset.store(next_read_offset, std::memory_order_release);
         }
 
         // finally, mark as available
-        current_message_header->flags.store(MESSAGE_AVAILABLE, std::memory_order_release);
+        current_message_header->flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_release);
     }
 
     void SpscIpcQueue::insert_skip_message(MessageHeader& header, size_t padded_bytes) {
