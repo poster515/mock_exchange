@@ -4,6 +4,8 @@
 #include <optional>
 #include <functional>
 #include <thread>
+#include <memory>
+#include <iostream>
 
 #include "spsc_ipc_queue_headers.h"
 
@@ -12,7 +14,8 @@ using namespace std::chrono_literals;
 namespace message_transport {
 
     // forward decl
-    class SpscIpcQueueRaiiWrapper;
+    class SpscIpcQueueRaiiWriterWrapper;
+    class SpscIpcQueueRaiiReaderWrapper;
 
     // some checkers for safety
     // static_assert(std::atomic<uint64_t>::is_always_lock_free);
@@ -34,20 +37,20 @@ namespace message_transport {
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
         static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
     public:
-        using CallbackModel = std::function<void(SpscIpcQueueRaiiWrapper)>;
+        using CallbackModel = std::function<void(SpscIpcQueueRaiiReaderWrapper)>;
         SpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, std::optional<CallbackModel> callback = std::nullopt);
         ~SpscIpcQueue();
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 
         // returned wrapper, the buffer will be committed to the queue.
-        SpscIpcQueueRaiiWrapper blocking_claim_buffer(size_t size);
+        SpscIpcQueueRaiiWriterWrapper blocking_claim_buffer(size_t size);
 
-        std::optional<SpscIpcQueueRaiiWrapper> nonblocking_claim_buffer(size_t size);
+        std::optional<SpscIpcQueueRaiiWriterWrapper> nonblocking_claim_buffer(size_t size);
 
         // public API that exposes a single, non-blocking call for the consumer to poll for new messages in the queue.
         // This method will return immediately if there are no new messages available, and will return a wrapper around 
         // the message buffer if a new message is available for the consumer to read.
-        std::optional<SpscIpcQueueRaiiWrapper> poll_buffer();
+        std::optional<SpscIpcQueueRaiiReaderWrapper> poll_buffer();
 
     private:
 
@@ -67,6 +70,8 @@ namespace message_transport {
 
         int fd;
 
+        std::mutex std_cout_mtx;
+
         // if the queue owner is the reader this can optionally be looped forever, reading messages
         // as they become available in the queue, and then processing them using some user-provided callback function.
         void read_buffer();
@@ -77,16 +82,23 @@ namespace message_transport {
         
         // waits for the current slot to become available, either because its been read or because the region is skipped from a pervious iteration.
         // Returns the number of application bytes that were stored in the slot.
-        inline void wait_for_slot_until(const uint64_t write_offset, const size_t size, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
+        inline void wait_for_slot_until(const uint64_t write_offset, const size_t total_size_with_header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
             // basically just need the read_offset of the current reader to be outside the range of this write region
-            for (uint64_t read_offset = global_header->read_offset.load(std::memory_order_relaxed);
-                    write_offset <= read_offset && read_offset < size;) {
+            uint64_t read_offset = global_header->read_offset.load(std::memory_order_relaxed);
+
+            {
+                std::lock_guard lock(std_cout_mtx);
+                std::cout << "Waiting for slot at offset " << write_offset << " with size " << total_size_with_header - sizeof(MessageHeader) << " bytes to become available. Current read offset: " << read_offset << "\n";
+            }
+
+            while (write_offset <= read_offset && read_offset < total_size_with_header) {
 
                 const auto& header = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_offset);
                 if (header.flags.load(std::memory_order_relaxed) == MESSAGE_AVAILABLE) {
                     break;
                 }
                 std::this_thread::sleep_for(timeout);
+                read_offset = global_header->read_offset.load(std::memory_order_relaxed);
             }
         }
 

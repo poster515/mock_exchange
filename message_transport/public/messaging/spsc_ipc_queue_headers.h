@@ -18,16 +18,17 @@ namespace message_transport {
         std::atomic_bool has_reader;
     };
 
-    const uint8_t MESSAGE_AVAILABLE = 0x00; // buffer space has neither been claimed nor committed, can be claimed by producer
-    const uint8_t MESSAGE_SKIPPED = 0x01; // used as bookend when there is no room at end of queue and we must start at beginning
-    const uint8_t MESSAGE_COMMITTED = 0x02; // indicates that the message has been fully written and is ready for the consumer to read
-    const uint8_t MESSAGE_ACQUIRED = 0x04; // indicates that the consumer has acquired the message for reading, used for synchronization between producer and consumer
+    const uint8_t MESSAGE_UNKNOWN = 0x00; // initial state of a message slot, should never be observed in normal operation since the producer should set the state to MESSAGE_LEASED as soon as it claims the slot for writing
+    const uint8_t MESSAGE_AVAILABLE = 0x01; // buffer space has neither been claimed nor committed, can be claimed by producer
+    const uint8_t MESSAGE_SKIPPED = 0x02; // used as bookend when there is no room at end of queue and we must start at beginning
+    const uint8_t MESSAGE_COMMITTED = 0x04; // indicates that the message has been fully written and is ready for the consumer to read
     const uint8_t MESSAGE_LEASED = 0x08; // indicates that the producer has checked out a buffer space for writing, but has not actually committed any data yet
 
     // inserted before each message in the queue to manage the state of that message and provide metadata about the message.
     struct MessageHeader {
-        std::atomic<uint32_t> message_size; // Size of the message payload EXCLUDING the size of this message header
         std::atomic<uint8_t> flags; // Flags for message metadata
+        std::array<uint8_t, 3> padding; // padding to ensure the message header is 8 bytes, which allows for proper alignment of the message payload that follows the header
+        std::atomic<uint32_t> message_size; // size of the message payload in bytes, used for managing the queue and ensuring messages do not exceed the queue capacity
     };
 
 #pragma pack(pop)
