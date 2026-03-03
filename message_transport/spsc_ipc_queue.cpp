@@ -71,7 +71,7 @@ namespace message_transport {
         
         // determine a starting point in the shared memory for the producer to write the message, 
         // and return a wrapper that will commit the buffer to the queue upon destruction.
-        if (size > (queue_size_bytes - sizeof(GlobalHeader)) - sizeof(MessageHeader)) {
+        if (size > (queue_size_bytes - sizeof(GlobalHeader)) - sizeof(MessageHeader) || !is_writer) {
             // Message size exceeds the total queue capacity, cannot claim buffer
             throw std::runtime_error(std::format("Message size {} bytes exceeds the total queue capacity of {} bytes", size, queue_size_bytes - sizeof(GlobalHeader)));
         }

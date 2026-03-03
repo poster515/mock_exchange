@@ -240,68 +240,66 @@ TEST_F(SpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
     }
 }
 
-// TEST_F(SpscIpcQueueTest, ExceedQueueCapacity) {
-//     SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(SpscIpcQueueTest, ExceedQueueCapacity) {
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
 
-//     auto wrapper = writer.blocking_claim_buffer(QUEUE_SIZE + 1);
-//     EXPECT_EQ(wrapper.get_buffer(), nullptr);
-// }
+    ASSERT_THROW(auto wrapper = writer.blocking_claim_buffer(QUEUE_SIZE + 1), std::runtime_error);
+}
 
-// TEST_F(SpscIpcQueueTest, ReaderCannotClaim) {
-//     SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
-//     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-//     SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
-//     EXPECT_THROW(reader.blocking_claim_buffer(64), std::runtime_error);
-// }
+TEST_F(SpscIpcQueueTest, ReaderCannotClaim) {
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    EXPECT_THROW(reader.blocking_claim_buffer(64), std::runtime_error);
+}
 
-// TEST_F(SpscIpcQueueTest, WriterCannotPoll) {
-//     SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(SpscIpcQueueTest, WriterCannotPoll) {
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
 
-//     EXPECT_THROW(writer.poll_buffer(), std::runtime_error);
-// }
+    EXPECT_THROW(writer.poll_buffer(), std::runtime_error);
+}
 
-// TEST_F(SpscIpcQueueTest, LargeMessageSequence) {
-//     SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
-//     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-//     SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+TEST_F(SpscIpcQueueTest, LargeMessageSequence) {
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
 
-//     const size_t large_msg_size = 512;
-//     std::vector<std::vector<char>> written_data;
-//     std::vector<std::vector<char>> read_data;
+    const size_t large_msg_size = 512;
+    std::vector<std::vector<char>> written_data;
+    std::vector<std::vector<char>> read_data;
 
-//     auto producer = [&writer, &written_data, large_msg_size]() {
-//         for (int i = 0; i < 5; ++i) {
-//             std::vector<char> data(large_msg_size, static_cast<char>(i));
-//             auto wrapper = writer.blocking_claim_buffer(large_msg_size);
-//             if (wrapper.get_buffer() != nullptr) {
-//                 wrapper.write_to_buffer(data.data());
-//                 written_data.push_back(data);
-//             }
-//         }
-//     };
+    auto producer = [&writer, &written_data, large_msg_size]() {
+        for (int i = 0; i < 5; ++i) {
+            std::vector<char> data(large_msg_size, static_cast<char>(i));
+            auto wrapper = writer.blocking_claim_buffer(large_msg_size);
+            wrapper.write_to_buffer(data.data(), data.size());
+            written_data.push_back(data);
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    };
 
-//     auto consumer = [&reader, &read_data, large_msg_size]() {
-//         int count = 0;
-//         while (count < 5) {
-//             auto wrapper = reader.poll_buffer();
-//             if (wrapper.has_value()) {
-//                 std::vector<char> data(large_msg_size);
-//                 std::memcpy(data.data(), wrapper->get_buffer(), large_msg_size);
-//                 read_data.push_back(data);
-//                 count++;
-//             }
-//             std::this_thread::yield();
-//         }
-//     };
+    auto consumer = [&reader, &read_data, large_msg_size]() {
+        int count = 0;
+        while (count < 5) {
+            auto wrapper = reader.poll_buffer();
+            if (wrapper.has_value()) {
+                std::vector<char> data(large_msg_size);
+                std::memcpy(data.data(), wrapper->get_buffer(), large_msg_size);
+                read_data.push_back(data);
+                count++;
+            }
+            std::this_thread::yield();
+        }
+    };
 
-//     std::thread producer_thread(producer);
-//     std::thread consumer_thread(consumer);
+    std::thread producer_thread(producer);
+    std::thread consumer_thread(consumer);
 
-//     producer_thread.join();
-//     consumer_thread.join();
+    producer_thread.join();
+    consumer_thread.join();
 
-//     EXPECT_EQ(written_data.size(), read_data.size());
-//     for (size_t i = 0; i < written_data.size(); ++i) {
-//         EXPECT_EQ(written_data[i], read_data[i]);
-//     }
-// }
+    EXPECT_EQ(written_data.size(), read_data.size());
+    for (size_t i = 0; i < written_data.size(); ++i) {
+        EXPECT_EQ(written_data[i], read_data[i]);
+    }
+}
