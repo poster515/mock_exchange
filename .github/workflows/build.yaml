@@ -32,8 +32,10 @@ jobs:
         ls -la 
         cd ./build/build/Release
         clear && make -j8
+      env:
+        TERM: xterm
 
     - name: Run tests
       run: |
-        cd ./build/build/Debug/message_transport/test
+        cd ./build/build/Release/message_transport/test
         ctest --output-on-failure
