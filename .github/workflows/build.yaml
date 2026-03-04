@@ -1,0 +1,34 @@
+name: C++ CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3 cmake
+        pip install conan==2.*
+
+    - name: Build
+      run: |
+        mkdir -p build
+        conan install . --output-folder build --build=missing
+        cmake -B build/build/Debug -DCMAKE_TOOLCHAIN_FILE=./build/build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug .
+        cd ./build/build/Debug
+        clear && make -j8
+
+    - name: Run tests
+      run: |
+        cd ./build/build/Debug/message_transport/test
+        ctest --output-on-failure
