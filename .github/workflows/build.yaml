@@ -26,6 +26,8 @@ jobs:
         mkdir -p build
         conan install . --output-folder build --build=missing
         cmake -B build/build/Debug -DCMAKE_TOOLCHAIN_FILE=./build/build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug .
+        pwd
+        ls -la 
         cd ./build/build/Debug
         clear && make -j8
 
