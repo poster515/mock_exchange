@@ -46,6 +46,62 @@ TEST_F(SpscIpcQueueTest, BasicWriteAndRead) {
     EXPECT_EQ(read_data, test_data);
 }
 
+TEST_F(SpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+
+    const size_t msg_size = 64;
+    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader);
+    const int num_messages_to_fill = available_space / (msg_size + sizeof(message_transport::MessageHeader));
+
+    std::vector<int> written_values;
+    std::atomic<bool> producer_blocked(false);
+
+    // Fill the queue
+    for (int i : std::ranges::iota_view{0, num_messages_to_fill}) {
+        auto wrapper = writer.blocking_claim_buffer(msg_size);
+        int value { i };
+        wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(int));
+        written_values.push_back(value);
+    }
+
+    // Start producer thread that will block trying to write
+    std::thread producer([&writer, &producer_blocked, msg_size]() {
+        producer_blocked.store(true, std::memory_order_release);
+        int value = 999;
+        auto wrapper = writer.blocking_claim_buffer(msg_size);
+        wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(int));
+        producer_blocked.store(false, std::memory_order_release);
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    ASSERT_TRUE(producer_blocked.load(std::memory_order_acquire));
+
+    // Read messages one by one to free up space
+    for (int i : std::ranges::iota_view{0, num_messages_to_fill}) {
+        auto read_wrapper = reader.poll_buffer();
+        ASSERT_TRUE(read_wrapper.has_value());
+        int value;
+        std::memcpy(&value, read_wrapper->get_buffer(), sizeof(int));
+        EXPECT_EQ(value, i);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    // Producer should now be able to complete
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    EXPECT_FALSE(producer_blocked.load(std::memory_order_acquire));
+
+    producer.join();
+
+    // Verify the last message from producer
+    auto final_read = reader.poll_buffer();
+    ASSERT_TRUE(final_read.has_value());
+    int final_value;
+    std::memcpy(&final_value, final_read->get_buffer(), sizeof(int));
+    EXPECT_EQ(final_value, 999);
+}
+
 TEST_F(SpscIpcQueueTest, BasicQueueWrapping) {
     const size_t SMALL_QUEUE_SIZE = 128;
     SpscIpcQueue writer(SHM_NAME, SMALL_QUEUE_SIZE, std::nullopt);
@@ -361,5 +417,50 @@ TEST_F(SpscIpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
         EXPECT_EQ(written_messages[i].uint32_val, read_messages[i].uint32_val);
         EXPECT_EQ(written_messages[i].uint64_val, read_messages[i].uint64_val);
         EXPECT_EQ(written_messages[i].ull_val, read_messages[i].ull_val);
+    }
+}
+
+TEST_F(SpscIpcQueueTest, LongRunningProducerConsumer) {
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+
+    const size_t NUM_MESSAGES = 4096;
+    std::vector<uint64_t> written_values;
+    std::vector<uint64_t> read_values;
+    written_values.reserve(NUM_MESSAGES);
+    read_values.reserve(NUM_MESSAGES);
+
+    auto producer = [&writer, &written_values, NUM_MESSAGES]() {
+        for (uint64_t i = 0; i < NUM_MESSAGES; ++i) {
+            auto wrapper = writer.blocking_claim_buffer(sizeof(uint64_t));
+            const uint64_t value = i;
+            ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t)));
+            written_values.push_back(value);
+            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+        }
+    };
+
+    auto consumer = [&reader, &read_values, NUM_MESSAGES]() {
+        while (read_values.size() < NUM_MESSAGES) {
+            auto wrapper = reader.poll_buffer();
+            if (wrapper.has_value()) {
+                uint64_t value;
+                std::memcpy(&value, wrapper->get_buffer(), sizeof(uint64_t));
+                read_values.push_back(value);
+            }
+            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+        }
+    };
+
+    std::thread producer_thread(producer);
+    std::thread consumer_thread(consumer);
+
+    producer_thread.join();
+    consumer_thread.join();
+
+    EXPECT_EQ(written_values.size(), read_values.size());
+    for (size_t i = 0; i < written_values.size(); ++i) {
+        EXPECT_EQ(written_values[i], read_values[i]);
     }
 }
