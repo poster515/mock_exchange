@@ -26,7 +26,7 @@ jobs:
         mkdir -p build
         pwd
         ls -la
-        conan install . --output-folder build --build=missing
+        conan install . --output-folder build --build=missing -s compiler.cppstd=20
         cmake -B build/build/Debug -DCMAKE_TOOLCHAIN_FILE=./build/build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug .
         pwd
         ls -la 
