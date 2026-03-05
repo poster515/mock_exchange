@@ -1,6 +1,9 @@
 [requires]
-gtest/1.17.0
 magic_enum/0.9.7
+spdlog/1.17.0
+
+[test_requires]
+gtest/1.17.0
 
 [generators]
 CMakeDeps

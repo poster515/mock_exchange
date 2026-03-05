@@ -9,7 +9,6 @@
 #include <thread>
 #include <format>
 
-#include <iostream>
 
 namespace message_transport {
     SpscIpcQueue::SpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, std::optional<CallbackModel> callback)
@@ -124,11 +123,7 @@ namespace message_transport {
 
         new_message_header->message_size.store(size, std::memory_order_relaxed);
         new_message_header->flags.store(MESSAGE_LEASED_FOR_WRITE, std::memory_order_release);
-         
-        {
-            std::lock_guard lock(std_cout_mtx);
-            std::cout << "Claimed buffer at offset " << current_write_offset << " with size " << size << " bytes (total size with header: " << size_required << " bytes), old_flags=" << std::to_string(old_flags) << "\n";
-        }
+        spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes), old_flags={}", current_write_offset, size, size_required, std::to_string(old_flags));
         return SpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
     }
 
@@ -153,9 +148,7 @@ namespace message_transport {
             case MESSAGE_AVAILABLE_FOR_READ: {
                 // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
                 message_header->flags.store(MESSAGE_LEASED_FOR_READ, std::memory_order_release);
-
-                std::lock_guard lock(std_cout_mtx);
-                std::cout << "Polled message at offset " << current_read_offset << " with size " << message_header->message_size.load(std::memory_order_relaxed) << " bytes (total size with header: " << total_message_len << " bytes)\n";
+                spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", current_read_offset, message_header->message_size.load(std::memory_order_relaxed), total_message_len);
                 return SpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len);
             }
             case MESSAGE_SKIPPED: {
@@ -204,10 +197,7 @@ namespace message_transport {
     void SpscIpcQueue::insert_skip_message(MessageHeader& header, size_t padded_bytes) {
         const auto current_skip_message_position = std::distance(reinterpret_cast<uint8_t*>(global_header), reinterpret_cast<uint8_t*>(&header));
         
-        {
-            std::lock_guard lock(std_cout_mtx);
-            std::cout << "Waiting to insert skip message at offset " << current_skip_message_position << " with size " << padded_bytes << " bytes to wrap around the queue\n";
-        }
+        spdlog::info("Waiting to insert skip message at offset {} with size {} bytes to wrap around the queue", current_skip_message_position, padded_bytes);
 
         // make sure the reader is out of our way
         wait_for_slot_until(current_skip_message_position, padded_bytes + sizeof(MessageHeader));
@@ -215,10 +205,7 @@ namespace message_transport {
         header.message_size.store(padded_bytes, std::memory_order_relaxed);
         header.flags.store(MESSAGE_SKIPPED, std::memory_order_release);
 
-        {
-            std::lock_guard lock(std_cout_mtx);
-            std::cout << "Inserting skip message at offset " << current_skip_message_position << " with size " << padded_bytes << " bytes to wrap around the queue\n";
-        }
+        spdlog::info("Inserted skip message at offset {} with size {} bytes to wrap around the queue", current_skip_message_position, padded_bytes);
 
         // be nice and set these to 0
         auto* message_payload = static_cast<void*>(reinterpret_cast<uint8_t*>(&header) + sizeof(MessageHeader));

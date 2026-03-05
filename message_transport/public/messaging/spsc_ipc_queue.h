@@ -7,6 +7,8 @@
 #include <memory>
 #include <iostream>
 
+#include <spdlog/spdlog.h>
+
 #include "spsc_ipc_queue_headers.h"
 
 using namespace std::chrono_literals;
@@ -70,8 +72,6 @@ namespace message_transport {
 
         int fd;
 
-        std::mutex std_cout_mtx;
-
         // if the queue owner is the reader this can optionally be looped forever, reading messages
         // as they become available in the queue, and then processing them using some user-provided callback function.
         void read_buffer();
@@ -85,11 +85,7 @@ namespace message_transport {
         inline void wait_for_slot_until(const uint64_t write_offset, const size_t total_size_with_header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
             // basically just need the read_offset of the current reader to be outside the range of this write region
             uint64_t read_offset = global_header->read_offset.load(std::memory_order_relaxed);
-
-            {
-                std::lock_guard lock(std_cout_mtx);
-                std::cout << "Waiting for slot at offset " << write_offset << " with size " << total_size_with_header - sizeof(MessageHeader) << " bytes to become available. Current read offset: " << read_offset << "\n";
-            }
+            spdlog::info("Waiting for slot at offset {} with size {} bytes to become available. Current read offset: {}", write_offset, total_size_with_header - sizeof(MessageHeader), read_offset);
 
             // const auto read_flags = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_offset)->flags.load(std::memory_order_relaxed);
 

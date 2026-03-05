@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/public/messaging)
 
+find_package(spdlog REQUIRED)
+
 # Library
 add_library(messaging SHARED
     ${PUBLIC_INCLUDE_DIR}/spsc_ipc_queue.h
@@ -13,6 +15,10 @@ add_library(messaging SHARED
 
 target_include_directories(messaging PUBLIC
     ${PUBLIC_INCLUDE_DIR}
+)
+
+target_link_libraries(messaging PUBLIC
+    spdlog::spdlog
 )
 
 # Unit Tests
