@@ -2,6 +2,7 @@
 
 #include <ranges>
 #include <assert.h>
+#include <cstring>
 
 namespace message_transport {
 

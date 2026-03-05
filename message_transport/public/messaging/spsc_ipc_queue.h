@@ -91,8 +91,10 @@ namespace message_transport {
                 std::cout << "Waiting for slot at offset " << write_offset << " with size " << total_size_with_header - sizeof(MessageHeader) << " bytes to become available. Current read offset: " << read_offset << "\n";
             }
 
+            // const auto read_flags = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_offset)->flags.load(std::memory_order_relaxed);
+
             // TODO: need to check 
-            while (write_offset <= read_offset && read_offset < (write_offset + total_size_with_header)) {
+            while (write_offset <= read_offset && read_offset < (write_offset + total_size_with_header)) { //} && read_flags != MESSAGE_AVAILABLE_FOR_WRITE && read_flags != MESSAGE_UNKNOWN) {
 
                 const auto& header = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_offset);
                 if (header.flags.load(std::memory_order_relaxed) == MESSAGE_AVAILABLE_FOR_WRITE || header.flags.load(std::memory_order_relaxed) == MESSAGE_UNKNOWN) {

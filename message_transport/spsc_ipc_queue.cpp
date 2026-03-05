@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <string>
 #include <thread>
+#include <format>
 
 #include <iostream>
 
@@ -26,7 +27,7 @@ namespace message_transport {
             throw std::runtime_error("Failed to open shared memory at file " + std::string(shm_file_name));
         }
 
-        ftruncate(fd, queue_size_bytes);
+        std::ignore = ftruncate(fd, queue_size_bytes);
         void* ptr = mmap(nullptr, queue_size_bytes,
                         PROT_READ | PROT_WRITE,
                         MAP_SHARED,
@@ -159,12 +160,14 @@ namespace message_transport {
             }
             case MESSAGE_SKIPPED: {
                 // this means the producer had to skip this region to wrap around, so we should just move our read offset to the beginning of the queue and try again on the next poll.
+                // message_header->flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_release);
                 global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
                 return poll_buffer();
             }
             case MESSAGE_AVAILABLE_FOR_WRITE: {
                 // if the reader has polled this again, assume they have read the current slot and are ready to bump the read offset/consume the next message.
                 global_header->read_offset.store(current_read_offset + total_message_len, std::memory_order_release);
+                // TODO: would prefer to loop here instead of recurse.
                 return poll_buffer();
             }
             default: {
