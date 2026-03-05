@@ -1,6 +1,8 @@
 
 # C++ Market Structure
 
+[![C++ CI](https://github.com/poster515/mock_exchange/actions/workflows/build.yaml/badge.svg?branch=main)](https://github.com/poster515/mock_exchange/actions/workflows/build.yaml)
+
 A modular, testable market microstructure implementation with gateways, sequencers, matching engine, and market data distribution.
 
 ## Architecture
