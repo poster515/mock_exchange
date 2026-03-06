@@ -4,6 +4,8 @@
 #include <assert.h>
 #include <cstring>
 
+#include "spsc_ipc_queue.h"
+
 namespace message_transport {
 
     /**
@@ -36,25 +38,20 @@ namespace message_transport {
     class SpscIpcQueueRaiiReaderWrapper : public SpscIpcQueueRaiiWrapper
     {
     public:
-        SpscIpcQueueRaiiReaderWrapper(uint8_t* buffer, size_t buffer_size)
-            : SpscIpcQueueRaiiWrapper(buffer, buffer_size) {}
+        SpscIpcQueueRaiiReaderWrapper(uint8_t* buffer, size_t buffer_size, SpscIpcQueue& queue)
+            : SpscIpcQueueRaiiWrapper(buffer, buffer_size)
+            , queue(queue) {}
 
         SpscIpcQueueRaiiReaderWrapper(const SpscIpcQueueRaiiReaderWrapper&) = delete;
         SpscIpcQueueRaiiReaderWrapper& operator=(const SpscIpcQueueRaiiReaderWrapper&) = delete;
         SpscIpcQueueRaiiReaderWrapper(SpscIpcQueueRaiiReaderWrapper&& other)
-            : SpscIpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size()) {
+            : SpscIpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size())
+            , queue(other.queue) {
             // need to relinquish the other wrapper of its resources/ownership
             other.wrapper = std::span<uint8_t>();
             other.released = true;
         }
-        SpscIpcQueueRaiiReaderWrapper& operator=(SpscIpcQueueRaiiReaderWrapper&& other) {
-            if (this != &other) {
-                wrapper = other.wrapper;
-                other.wrapper = std::span<uint8_t>();
-                other.released = true; // prevent the other wrapper from releasing the message buffer when it is destroyed
-            }
-            return *this;
-        };
+        SpscIpcQueueRaiiReaderWrapper& operator=(SpscIpcQueueRaiiReaderWrapper&& other) = delete;
 
         ~SpscIpcQueueRaiiReaderWrapper() {
             if (!released) {
@@ -63,8 +60,7 @@ namespace message_transport {
         }
 
         void release() {
-            auto* message_header = reinterpret_cast<MessageHeader*>(wrapper.data());
-            message_header->flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_release);
+            queue.release_buffer(*reinterpret_cast<MessageHeader*>(wrapper.data()));
             released = true;
         }
 
@@ -87,7 +83,7 @@ namespace message_transport {
         // ideally only test function, but you could get cheeky with this.
         [[nodiscard]] const void* get_buffer() const {
             auto* message_header = reinterpret_cast<MessageHeader*>(wrapper.data());
-            if (message_header->flags.load(std::memory_order_acquire) & MESSAGE_LEASED_FOR_READ) {
+            if (message_header->commit_flag.load(std::memory_order_acquire) == CommitFlag::READY_FOR_CONSUMER) {
                 return static_cast<void*>(wrapper.data() + sizeof(MessageHeader));
             }
             return nullptr; // message is not available for reading
@@ -95,6 +91,7 @@ namespace message_transport {
 
     private:
         bool released { false };
+        SpscIpcQueue& queue;
     };
 
     class SpscIpcQueueRaiiWriterWrapper : public SpscIpcQueueRaiiWrapper
@@ -110,21 +107,15 @@ namespace message_transport {
         SpscIpcQueueRaiiWriterWrapper(SpscIpcQueueRaiiWriterWrapper&&) = delete;
         SpscIpcQueueRaiiWriterWrapper& operator=(SpscIpcQueueRaiiWriterWrapper&&) = delete;
 
-        ~SpscIpcQueueRaiiWriterWrapper() {
-            // upon destruction of the writer wrapper, we can set the message header flags to indicate that the message is now available for the consumer to read.
-            auto* message_header = reinterpret_cast<MessageHeader*>(wrapper.data());
-            message_header->flags.store(MESSAGE_AVAILABLE_FOR_READ, std::memory_order_release);
-        }
+        ~SpscIpcQueueRaiiWriterWrapper() = default;
 
         bool write_to_buffer(const char* data, size_t size) {
+            assert(static_cast<size_t>(size + sizeof(MessageHeader)) <= wrapper.size_bytes());
+            auto* hdr = reinterpret_cast<MessageHeader*>(wrapper.data());
+            std::memcpy(wrapper.data() + sizeof(MessageHeader), data, size);
 
-            assert(size <= wrapper.size_bytes() - sizeof(MessageHeader));
-
-            // first we write the message payload, then we set the message header to indicate that the message
-            // is available for the consumer to read. This ensures that the consumer will never see a partially
-            // written message, as it will only read messages that have their header set to MESSAGE_AVAILABLE.
-            auto* message_payload = static_cast<void*>(wrapper.data() + sizeof(MessageHeader));
-            std::memcpy(message_payload, data, size);
+            // publish to consumer atomically
+            hdr->commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
             return true;
         }
     };

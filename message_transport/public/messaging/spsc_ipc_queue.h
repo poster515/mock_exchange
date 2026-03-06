@@ -54,6 +54,8 @@ namespace message_transport {
         // the message buffer if a new message is available for the consumer to read.
         std::optional<SpscIpcQueueRaiiReaderWrapper> poll_buffer();
 
+        void release_buffer(MessageHeader& header);
+
     private:
 
         // whether this instance is the writer or reader, used for managing the state of the
@@ -87,13 +89,10 @@ namespace message_transport {
             uint64_t read_offset = global_header->read_offset.load(std::memory_order_relaxed);
             spdlog::info("Waiting for slot at offset {} with size {} bytes to become available. Current read offset: {}", write_offset, total_size_with_header - sizeof(MessageHeader), read_offset);
 
-            // const auto read_flags = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_offset)->flags.load(std::memory_order_relaxed);
-
-            // TODO: need to check 
-            while (write_offset <= read_offset && read_offset < (write_offset + total_size_with_header)) { //} && read_flags != MESSAGE_AVAILABLE_FOR_WRITE && read_flags != MESSAGE_UNKNOWN) {
+            while (write_offset <= read_offset && read_offset < (write_offset + total_size_with_header)) {
 
                 const auto& header = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_offset);
-                if (header.flags.load(std::memory_order_relaxed) == MESSAGE_AVAILABLE_FOR_WRITE || header.flags.load(std::memory_order_relaxed) == MESSAGE_UNKNOWN) {
+                if (header.commit_flag.load(std::memory_order_relaxed) == CommitFlag::NOT_READY) {
                     break;
                 }
                 std::this_thread::sleep_for(timeout);

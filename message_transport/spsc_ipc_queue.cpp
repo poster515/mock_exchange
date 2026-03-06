@@ -74,6 +74,9 @@ namespace message_transport {
         if (size > (queue_size_bytes - sizeof(GlobalHeader)) - sizeof(MessageHeader) || !is_writer) {
             // Message size exceeds the total queue capacity, cannot claim buffer
             throw std::runtime_error(std::format("Message size {} bytes exceeds the total queue capacity of {} bytes", size, queue_size_bytes - sizeof(GlobalHeader)));
+        } else if (size == 0) {
+            spdlog::warn("Attempting to claim buffer for message with size 0 bytes. This is likely a bug in the caller, ignoring for now");
+            throw std::runtime_error("Cannot claim buffer for message with size 0 bytes");
         }
 
         const auto size_required = size + sizeof(MessageHeader);
@@ -119,10 +122,9 @@ namespace message_transport {
         auto* new_message_header = static_cast<MessageHeader*>(new_buffer_ptr);
 
         // DEBUG ONLY PLS REMOVE
-        const auto old_flags = new_message_header->flags.load(std::memory_order_relaxed);
+        const auto old_flags = static_cast<uint32_t>(new_message_header->commit_flag.load(std::memory_order_relaxed));
 
-        new_message_header->message_size.store(size, std::memory_order_relaxed);
-        new_message_header->flags.store(MESSAGE_LEASED_FOR_WRITE, std::memory_order_release);
+        new_message_header->message_size = size;
         spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes), old_flags={}", current_write_offset, size, size_required, std::to_string(old_flags));
         return SpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
     }
@@ -141,27 +143,27 @@ namespace message_transport {
 
         void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + current_read_offset);
         auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
-        const auto block_flags = message_header->flags.load(std::memory_order_acquire);
-        const auto total_message_len = message_header->message_size.load(std::memory_order_relaxed) + sizeof(MessageHeader);
+        auto block_state = message_header->commit_flag.load(std::memory_order_acquire);
 
-        switch (block_flags) {
-            case MESSAGE_AVAILABLE_FOR_READ: {
+        switch (block_state) {
+            case CommitFlag::READY_FOR_CONSUMER: {
+
+                const auto total_message_len = message_header->message_size + sizeof(MessageHeader);
+
+                if (message_header->type == MessageType::PADDING) {
+                    // if this is a padding message, we need to skip it and move the read offset to the next message after the padding message.
+                    spdlog::info("Polled skip message at offset {} with size {}, bytes (total size with header: {} bytes), skipping to beginning of queue", current_read_offset, message_header->message_size, total_message_len);
+                    message_header->commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
+                    global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
+                    return poll_buffer();
+                }
+
                 // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
-                message_header->flags.store(MESSAGE_LEASED_FOR_READ, std::memory_order_release);
-                spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", current_read_offset, message_header->message_size.load(std::memory_order_relaxed), total_message_len);
-                return SpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len);
+                spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", current_read_offset, message_header->message_size, total_message_len);
+                return SpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
             }
-            case MESSAGE_SKIPPED: {
-                // this means the producer had to skip this region to wrap around, so we should just move our read offset to the beginning of the queue and try again on the next poll.
-                // message_header->flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_release);
-                global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
-                return poll_buffer();
-            }
-            case MESSAGE_AVAILABLE_FOR_WRITE: {
-                // if the reader has polled this again, assume they have read the current slot and are ready to bump the read offset/consume the next message.
-                global_header->read_offset.store(current_read_offset + total_message_len, std::memory_order_release);
-                // TODO: would prefer to loop here instead of recurse.
-                return poll_buffer();
+            case CommitFlag::NOT_READY: {
+                return std::nullopt;
             }
             default: {
                 return std::nullopt;
@@ -169,29 +171,35 @@ namespace message_transport {
         }
     }
 
+    void SpscIpcQueue::release_buffer(MessageHeader& header) {
+        const auto total_message_len = header.message_size + sizeof(MessageHeader);
+        header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
+        global_header->read_offset.fetch_add(total_message_len, std::memory_order_release);
+    }
+
     void SpscIpcQueue::read_buffer() {
-        const auto current_read_offset = global_header->read_offset.load(std::memory_order_acquire);
-        const auto current_message_position = sizeof(GlobalHeader) + current_read_offset;
-        const auto current_message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + current_message_position);
-        const auto current_message_size = current_message_header->message_size.load(std::memory_order_acquire);
+        // const auto current_read_offset = global_header->read_offset.load(std::memory_order_acquire);
+        // const auto current_message_position = sizeof(GlobalHeader) + current_read_offset;
+        // const auto current_message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + current_message_position);
+        // const auto current_message_size = current_message_header->message_size.load(std::memory_order_acquire);
         
-        // dispatch message to consumer at some point here.
-        SpscIpcQueueRaiiReaderWrapper wrapper(reinterpret_cast<uint8_t*>(current_message_header), current_message_size + sizeof(MessageHeader));
-        (*dispatcher)(std::move(wrapper));
+        // // dispatch message to consumer at some point here.
+        // SpscIpcQueueRaiiReaderWrapper wrapper(reinterpret_cast<uint8_t*>(current_message_header), current_message_size + sizeof(MessageHeader));
+        // (*dispatcher)(std::move(wrapper));
 
-        // since we are the only reader we can safely increment the reader offset
-        const auto next_read_offset = current_read_offset + sizeof(MessageHeader) + current_message_size;
-        auto& header_at_next_read_offset = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + next_read_offset);
-        if (header_at_next_read_offset.flags.load(std::memory_order_acquire) == MESSAGE_SKIPPED) {
-            // if the next message is a skip message, we need to skip over it and move the read offset to the next message after the skip message.
-            header_at_next_read_offset.flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_relaxed);
-            global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
-        } else {
-            global_header->read_offset.store(next_read_offset, std::memory_order_release);
-        }
+        // // since we are the only reader we can safely increment the reader offset
+        // const auto next_read_offset = current_read_offset + sizeof(MessageHeader) + current_message_size;
+        // auto& header_at_next_read_offset = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + next_read_offset);
+        // if (header_at_next_read_offset.commit_flag.load(std::memory_order_acquire) == CommitFlag::SKIPPED) {
+        //     // if the next message is a skip message, we need to skip over it and move the read offset to the next message after the skip message.
+        //     header_at_next_read_offset.commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_relaxed);
+        //     global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
+        // } else {
+        //     global_header->read_offset.store(next_read_offset, std::memory_order_release);
+        // }
 
-        // finally, mark as available
-        current_message_header->flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_release);
+        // // finally, mark as available
+        // current_message_header->flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_release);
     }
 
     void SpscIpcQueue::insert_skip_message(MessageHeader& header, size_t padded_bytes) {
@@ -202,8 +210,9 @@ namespace message_transport {
         // make sure the reader is out of our way
         wait_for_slot_until(current_skip_message_position, padded_bytes + sizeof(MessageHeader));
 
-        header.message_size.store(padded_bytes, std::memory_order_relaxed);
-        header.flags.store(MESSAGE_SKIPPED, std::memory_order_release);
+        header.message_size = padded_bytes;
+        header.type = MessageType::PADDING;
+        header.commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
 
         spdlog::info("Inserted skip message at offset {} with size {} bytes to wrap around the queue", current_skip_message_position, padded_bytes);
 
