@@ -157,11 +157,10 @@ namespace message_transport {
                     global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
                     return poll_buffer();
                 }
-                
+
                 // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
                 spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", current_read_offset, message_header->message_size, total_message_len);
-                global_header->read_offset.store(current_read_offset + total_message_len, std::memory_order_release);
-                return SpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len);
+                return SpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
             }
             case CommitFlag::NOT_READY: {
                 return std::nullopt;
@@ -170,6 +169,12 @@ namespace message_transport {
                 return std::nullopt;
             }
         }
+    }
+
+    void SpscIpcQueue::release_buffer(MessageHeader& header) {
+        const auto total_message_len = header.message_size + sizeof(MessageHeader);
+        header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
+        global_header->read_offset.fetch_add(total_message_len, std::memory_order_release);
     }
 
     void SpscIpcQueue::read_buffer() {

@@ -54,6 +54,8 @@ namespace message_transport {
         // the message buffer if a new message is available for the consumer to read.
         std::optional<SpscIpcQueueRaiiReaderWrapper> poll_buffer();
 
+        void release_buffer(MessageHeader& header);
+
     private:
 
         // whether this instance is the writer or reader, used for managing the state of the

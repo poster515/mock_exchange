@@ -4,6 +4,8 @@
 #include <assert.h>
 #include <cstring>
 
+#include "spsc_ipc_queue.h"
+
 namespace message_transport {
 
     /**
@@ -36,25 +38,20 @@ namespace message_transport {
     class SpscIpcQueueRaiiReaderWrapper : public SpscIpcQueueRaiiWrapper
     {
     public:
-        SpscIpcQueueRaiiReaderWrapper(uint8_t* buffer, size_t buffer_size)
-            : SpscIpcQueueRaiiWrapper(buffer, buffer_size) {}
+        SpscIpcQueueRaiiReaderWrapper(uint8_t* buffer, size_t buffer_size, SpscIpcQueue& queue)
+            : SpscIpcQueueRaiiWrapper(buffer, buffer_size)
+            , queue(queue) {}
 
         SpscIpcQueueRaiiReaderWrapper(const SpscIpcQueueRaiiReaderWrapper&) = delete;
         SpscIpcQueueRaiiReaderWrapper& operator=(const SpscIpcQueueRaiiReaderWrapper&) = delete;
         SpscIpcQueueRaiiReaderWrapper(SpscIpcQueueRaiiReaderWrapper&& other)
-            : SpscIpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size()) {
+            : SpscIpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size())
+            , queue(other.queue) {
             // need to relinquish the other wrapper of its resources/ownership
             other.wrapper = std::span<uint8_t>();
             other.released = true;
         }
-        SpscIpcQueueRaiiReaderWrapper& operator=(SpscIpcQueueRaiiReaderWrapper&& other) {
-            if (this != &other) {
-                wrapper = other.wrapper;
-                other.wrapper = std::span<uint8_t>();
-                other.released = true; // prevent the other wrapper from releasing the message buffer when it is destroyed
-            }
-            return *this;
-        };
+        SpscIpcQueueRaiiReaderWrapper& operator=(SpscIpcQueueRaiiReaderWrapper&& other) = delete;
 
         ~SpscIpcQueueRaiiReaderWrapper() {
             if (!released) {
@@ -63,8 +60,7 @@ namespace message_transport {
         }
 
         void release() {
-            auto* message_header = reinterpret_cast<MessageHeader*>(wrapper.data());
-            message_header->commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
+            queue.release_buffer(*reinterpret_cast<MessageHeader*>(wrapper.data()));
             released = true;
         }
 
@@ -95,6 +91,7 @@ namespace message_transport {
 
     private:
         bool released { false };
+        SpscIpcQueue& queue;
     };
 
     class SpscIpcQueueRaiiWriterWrapper : public SpscIpcQueueRaiiWrapper
