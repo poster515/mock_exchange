@@ -551,3 +551,127 @@ TEST_F(SpscIpcQueueTest, TwoProducersOneConsumer) {
     EXPECT_EQ(written_values, read_values);
 }
 
+TEST_F(SpscIpcQueueTest, MultiProducerDifferentTypes) {
+    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+
+    const int NUM_MESSAGES = 50;
+    std::unordered_set<uint64_t> written_values;
+    std::unordered_set<uint64_t> read_values;
+    std::mutex written_mutex, read_mutex;
+
+    auto byte_producer = [&writer, &written_values, &written_mutex, NUM_MESSAGES]() {
+        for (int i = 1; i <= NUM_MESSAGES; ++i) {
+            const uint8_t value = static_cast<uint8_t>(i);
+            auto wrapper = writer.blocking_claim_buffer(sizeof(uint8_t));
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint8_t));
+            {
+                std::lock_guard lock(written_mutex);
+                written_values.insert(static_cast<uint64_t>(value));
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    };
+
+    auto uint32_producer = [&writer, &written_values, &written_mutex, NUM_MESSAGES]() {
+        for (int i = 1; i <= NUM_MESSAGES; ++i) {
+            const uint32_t value = static_cast<uint32_t>(i * 1000);
+            auto wrapper = writer.blocking_claim_buffer(sizeof(uint32_t));
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint32_t));
+            {
+                std::lock_guard lock(written_mutex);
+                written_values.insert(static_cast<uint64_t>(value));
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    };
+
+    auto uint64_producer = [&writer, &written_values, &written_mutex, NUM_MESSAGES]() {
+        for (int i = 1; i <= NUM_MESSAGES; ++i) {
+            const uint64_t value = static_cast<uint64_t>(i * 100000);
+            auto wrapper = writer.blocking_claim_buffer(sizeof(uint64_t));
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t));
+            {
+                std::lock_guard lock(written_mutex);
+                written_values.insert(value);
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    };
+
+    auto consumer = [&reader, &read_values, &read_mutex, total_msgs = NUM_MESSAGES * 3]() {
+        size_t count = 0;
+        while (count < total_msgs) {
+            auto wrapper = reader.poll_buffer();
+            if (wrapper.has_value()) {
+                switch (wrapper->get_payload_size()) {
+                    case sizeof(uint8_t): {
+                        uint8_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint8_t));
+                        {
+                            std::lock_guard lock(read_mutex);
+                            read_values.insert(static_cast<uint64_t>(value));
+                        }
+                        break;
+                    }
+                    case sizeof(uint32_t): {
+                        uint32_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint32_t));
+                        {
+                            std::lock_guard lock(read_mutex);
+                            read_values.insert(static_cast<uint64_t>(value));
+                        }
+                        break;
+                    }
+                    case sizeof(uint64_t): {
+                        uint64_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint64_t));
+                        {
+                            std::lock_guard lock(read_mutex);
+                            read_values.insert(value);
+                        }
+                        break;
+                    }
+                }
+                count++;
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
+        }
+    };
+
+    std::thread byte_thread(byte_producer);
+    std::thread uint32_thread(uint32_producer);
+    std::thread uint64_thread(uint64_producer);
+    std::thread consumer_thread(consumer);
+
+    byte_thread.join();
+    uint32_thread.join();
+    uint64_thread.join();
+    consumer_thread.join();
+
+    EXPECT_EQ(written_values.size(), read_values.size());
+    EXPECT_EQ(written_values, read_values);
+
+    // std::unordered_set<uint64_t> outer_join;
+    // std::set_symmetric_difference(
+    //     written_values.begin(), written_values.end(),
+    //     read_values.begin(), read_values.end(),
+    //     std::inserter(outer_join, outer_join.begin())
+    // );
+
+    // if (!outer_join.empty()) {
+    //     std::cout << "Outer join (values in one set but not both):\n";
+    //     for (const auto& value : outer_join) {
+    //         std::cout << "  " << value;
+    //         if (written_values.count(value)) {
+    //             std::cout << " (written only)";
+    //         } else {
+    //             std::cout << " (read only)";
+    //         }
+    //         std::cout << "\n";
+    //     }
+    // } else {
+    //     std::cout << "No differences found - sets are identical\n";
+    // }
+}

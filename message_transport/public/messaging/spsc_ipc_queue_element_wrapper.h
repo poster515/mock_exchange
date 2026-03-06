@@ -89,6 +89,11 @@ namespace message_transport {
             return nullptr; // message is not available for reading
         }
 
+        const size_t get_payload_size() const {
+            auto* message_header = reinterpret_cast<MessageHeader*>(wrapper.data());
+            return message_header->message_size;
+        }
+
     private:
         bool released { false };
         SpscIpcQueue& queue;
