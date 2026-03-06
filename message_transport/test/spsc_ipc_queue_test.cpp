@@ -497,7 +497,7 @@ TEST_F(SpscIpcQueueTest, TwoProducersOneConsumer) {
 
     auto producer2 = [&writer1, &written_values, &written_mutex, num_messages_per_producer, msg_size]() {
         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
-            const int32_t value = i * 2 + 1; // producer 2 writes odd numbers
+            const int32_t value = i + num_messages_per_producer;
             auto wrapper = writer1.blocking_claim_buffer(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
             {
@@ -507,7 +507,19 @@ TEST_F(SpscIpcQueueTest, TwoProducersOneConsumer) {
         }
     };
 
-    auto consumer = [&reader, &read_values, &read_mutex, total_msgs = num_messages_per_producer * 2, msg_size]() {
+    auto producer3 = [&writer1, &written_values, &written_mutex, num_messages_per_producer, msg_size]() {
+        for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
+            const int32_t value = i + (num_messages_per_producer * 2);
+            auto wrapper = writer1.blocking_claim_buffer(msg_size);
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
+            {
+                std::lock_guard lock(written_mutex);
+                written_values.insert(value);
+            }
+        }
+    };
+
+    auto consumer = [&reader, &read_values, &read_mutex, total_msgs = num_messages_per_producer * 3, msg_size]() {
         size_t count = 0;
         while (count < (total_msgs)) {
             auto wrapper = reader.poll_buffer();
@@ -527,10 +539,12 @@ TEST_F(SpscIpcQueueTest, TwoProducersOneConsumer) {
 
     std::thread producer1_thread(producer1);
     std::thread producer2_thread(producer2);
+    std::thread producer3_thread(producer3);
     std::thread consumer_thread(consumer);
 
     producer1_thread.join();
     producer2_thread.join();
+    producer3_thread.join();
     consumer_thread.join();
 
     EXPECT_EQ(written_values.size(), read_values.size());
