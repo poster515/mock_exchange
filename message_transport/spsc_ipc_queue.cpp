@@ -119,10 +119,14 @@ namespace message_transport {
                 // DEBUG ONLY PLS REMOVE
                 const auto old_flags = static_cast<uint32_t>(new_message_header->commit_flag.load(std::memory_order_relaxed));
 
-                new_message_header->message_size = size;
-                spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes), old_flags={}", current_write_offset, size, size_required, std::to_string(old_flags));
-                return SpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
-
+                if (old_flags != static_cast<uint32_t>(CommitFlag::NOT_READY)) {
+                    spdlog::warn("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes) but its claimed!! skipping ", current_write_offset, size, size_required);
+                } else {
+                    new_message_header->message_size = size;
+                    spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes), old_flags={}", current_write_offset, size, size_required, std::to_string(old_flags));
+                    return SpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
+                }
+                
             } else if ((current_write_offset + sizeof(MessageHeader)) <= queue_size_bytes) {
 
                 // we claimed successfully, but must write a skip message and try again.

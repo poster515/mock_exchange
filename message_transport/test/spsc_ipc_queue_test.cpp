@@ -467,71 +467,73 @@ TEST_F(SpscIpcQueueTest, LongRunningProducerConsumer) {
     }
 }
 
-// TEST_F(SpscIpcQueueTest, TwoProducersOneConsumer) {
-//     SpscIpcQueue writer1(SHM_NAME, QUEUE_SIZE, std::nullopt);
-//     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-//     SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+TEST_F(SpscIpcQueueTest, TwoProducersOneConsumer) {
+    SpscIpcQueue writer1(SHM_NAME, QUEUE_SIZE, std::nullopt);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
 
-//     const size_t msg_size = sizeof(int32_t);
-//     const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader);
-//     const size_t msgs_per_cycle = available_space / (msg_size + sizeof(message_transport::MessageHeader));
-//     const int num_messages_per_producer = (3 * msgs_per_cycle / 2) - 1;
+    const size_t msg_size = sizeof(int32_t);
+    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader);
+    const size_t msgs_per_cycle = available_space / (msg_size + sizeof(message_transport::MessageHeader));
+    const int num_messages_per_producer = (3 * msgs_per_cycle / 2) - 1;
 
-//     std::unordered_set<int32_t> written_values;
-//     std::unordered_set<int32_t> read_values;
-//     std::mutex written_mutex, read_mutex;
+    std::cout << "Each producer will write " << num_messages_per_producer << " messages, total messages: " << num_messages_per_producer * 2 << "\n";
 
-//     auto producer1 = [&writer1, &written_values, &written_mutex, num_messages_per_producer, msg_size]() {
-//         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
-//             const int32_t value = i * 2; // producer 1 writes even numbers
-//             auto wrapper = writer1.blocking_claim_buffer(msg_size);
-//             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
-//             {
-//                 std::lock_guard lock(written_mutex);
-//                 written_values.insert(value);
-//             }
-//         }
-//     };
+    std::unordered_set<int32_t> written_values;
+    std::unordered_set<int32_t> read_values;
+    std::mutex written_mutex, read_mutex;
 
-//     auto producer2 = [&writer1, &written_values, &written_mutex, num_messages_per_producer, msg_size]() {
-//         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
-//             const int32_t value = i * 2 + 1; // producer 2 writes odd numbers
-//             auto wrapper = writer1.blocking_claim_buffer(msg_size);
-//             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
-//             {
-//                 std::lock_guard lock(written_mutex);
-//                 written_values.insert(value);
-//             }
-//         }
-//     };
+    auto producer1 = [&writer1, &written_values, &written_mutex, num_messages_per_producer, msg_size]() {
+        for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
+            const int32_t value = i * 2; // producer 1 writes even numbers
+            auto wrapper = writer1.blocking_claim_buffer(msg_size);
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
+            {
+                std::lock_guard lock(written_mutex);
+                written_values.insert(value);
+            }
+        }
+    };
 
-//     auto consumer = [&reader, &read_values, &read_mutex, total_msgs = num_messages_per_producer * 2, msg_size]() {
-//         size_t count = 0;
-//         while (count < total_msgs - 2) {
-//             auto wrapper = reader.poll_buffer();
-//             if (wrapper.has_value()) {
-//                 int value;
-//                 std::memcpy(&value, wrapper->get_buffer(), msg_size);
-//                 {
-//                     std::lock_guard lock(read_mutex);
-//                     read_values.insert(value);
-//                     spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs - 2);
-//                 }
-//                 count++;
-//             }
-//             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-//         }
-//     };
+    auto producer2 = [&writer1, &written_values, &written_mutex, num_messages_per_producer, msg_size]() {
+        for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
+            const int32_t value = i * 2 + 1; // producer 2 writes odd numbers
+            auto wrapper = writer1.blocking_claim_buffer(msg_size);
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
+            {
+                std::lock_guard lock(written_mutex);
+                written_values.insert(value);
+            }
+        }
+    };
 
-//     std::thread producer1_thread(producer1);
-//     std::thread producer2_thread(producer2);
-//     std::thread consumer_thread(consumer);
+    auto consumer = [&reader, &read_values, &read_mutex, total_msgs = num_messages_per_producer * 2, msg_size]() {
+        size_t count = 0;
+        while (count < (total_msgs)) {
+            auto wrapper = reader.poll_buffer();
+            if (wrapper.has_value()) {
+                int value;
+                std::memcpy(&value, wrapper->get_buffer(), msg_size);
+                {
+                    std::lock_guard lock(read_mutex);
+                    read_values.insert(value);
+                    spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs - 2);
+                }
+                count++;
+            }
+            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+        }
+    };
 
-//     producer1_thread.join();
-//     producer2_thread.join();
-//     consumer_thread.join();
+    std::thread producer1_thread(producer1);
+    std::thread producer2_thread(producer2);
+    std::thread consumer_thread(consumer);
 
-//     EXPECT_EQ(written_values.size(), read_values.size());
-//     EXPECT_EQ(written_values, read_values);
-// }
+    producer1_thread.join();
+    producer2_thread.join();
+    consumer_thread.join();
+
+    EXPECT_EQ(written_values.size(), read_values.size());
+    EXPECT_EQ(written_values, read_values);
+}
 
