@@ -55,6 +55,7 @@ namespace message_transport {
         std::optional<SpscIpcQueueRaiiReaderWrapper> poll_buffer();
 
         void release_buffer(MessageHeader& header);
+        SpscIpcQueueRaiiWriterWrapper blocking_wait_at_slot(MessageHeader& header);
 
     private:
 
@@ -86,17 +87,25 @@ namespace message_transport {
         // Returns the number of application bytes that were stored in the slot.
         inline void wait_for_slot_until(const uint64_t write_offset, const size_t total_size_with_header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
             // basically just need the read_offset of the current reader to be outside the range of this write region
-            uint64_t read_offset = global_header->read_offset.load(std::memory_order_relaxed);
-            spdlog::info("Waiting for slot at offset {} with size {} bytes to become available. Current read offset: {}", write_offset, total_size_with_header - sizeof(MessageHeader), read_offset);
+            uint64_t read_begin = global_header->read_offset.load(std::memory_order_relaxed);
+            auto* message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_begin);
+            size_t read_end = read_begin + message_header->message_size;
+            const size_t write_end = write_offset + total_size_with_header;
 
-            while (write_offset <= read_offset && read_offset < (write_offset + total_size_with_header)) {
+            spdlog::info("Waiting for slot at offset {} with size {} bytes to become available. Current read offset: {}", write_offset, total_size_with_header - sizeof(MessageHeader), read_begin);
 
-                const auto& header = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_offset);
+            while ((write_offset <= read_begin && read_begin < write_end) ||
+                   (write_offset < read_end && read_end <= write_end)) {
+
+                const auto& header = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_begin);
                 if (header.commit_flag.load(std::memory_order_relaxed) == CommitFlag::NOT_READY) {
                     break;
                 }
+
                 std::this_thread::sleep_for(timeout);
-                read_offset = global_header->read_offset.load(std::memory_order_relaxed);
+                read_begin = global_header->read_offset.load(std::memory_order_relaxed);
+                message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_begin);
+                read_end = read_begin + message_header->message_size;
             }
         }
 

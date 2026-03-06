@@ -75,60 +75,50 @@ namespace message_transport {
             // Message size exceeds the total queue capacity, cannot claim buffer
             throw std::runtime_error(std::format("Message size {} bytes exceeds the total queue capacity of {} bytes", size, queue_size_bytes - sizeof(GlobalHeader)));
         } else if (size == 0) {
-            spdlog::warn("Attempting to claim buffer for message with size 0 bytes. This is likely a bug in the caller, ignoring for now");
             throw std::runtime_error("Cannot claim buffer for message with size 0 bytes");
         }
 
         const auto size_required = size + sizeof(MessageHeader);
-        uint64_t current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
-        uint64_t new_write_offset = current_write_offset + size_required;
 
-        bool insert_skip_message_at_current = false;
+        while (true) {
+            uint64_t current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
+            uint64_t new_write_offset = current_write_offset + size_required;
 
-        if (new_write_offset >= queue_size_bytes) {
-            new_write_offset = sizeof(GlobalHeader);
-            insert_skip_message_at_current = true;
-        }
-
-        while(!global_header->write_offset.compare_exchange_weak(current_write_offset, new_write_offset, std::memory_order_release, std::memory_order_relaxed)) {
-            // if this compare fails, we _might_ have lost the lock on the current writable region, or it might be a spurious failure.
-            // Try again.
-            current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
-            new_write_offset = current_write_offset + size_required;
-
-            if (new_write_offset >= queue_size_bytes) {
-                new_write_offset = sizeof(GlobalHeader);
-                insert_skip_message_at_current = true;
-            } else {
-                insert_skip_message_at_current = false;
+            while(!global_header->write_offset.compare_exchange_weak(current_write_offset, new_write_offset, std::memory_order_release, std::memory_order_relaxed)) {
+                // if this compare fails, we _might_ have lost the lock on the current writable region, or it might be a spurious failure.
+                // Try again.
+                current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
+                new_write_offset = current_write_offset + size_required;
             }
+
+            // once we're here we know we've claimed a buffer location. see if its valid or not.
+            if ((current_write_offset + size_required) < queue_size_bytes) {
+                // we successfully claimed a region for writing, and the new write offset is within the bounds of the queue,
+                // so we can break out of the loop and write our message.
+                wait_for_slot_until(current_write_offset, size_required);
+
+                // ok now we have a slot for writing. Try and block to write in at current_write_offset
+                void* new_buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
+                auto* new_message_header = static_cast<MessageHeader*>(new_buffer_ptr);
+
+                // DEBUG ONLY PLS REMOVE
+                const auto old_flags = static_cast<uint32_t>(new_message_header->commit_flag.load(std::memory_order_relaxed));
+
+                new_message_header->message_size = size;
+                spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes), old_flags={}", current_write_offset, size, size_required, std::to_string(old_flags));
+                return SpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
+            } else if ((current_write_offset + sizeof(MessageHeader)) < queue_size_bytes) {
+                // we claimed successfully, but must write a skip message and try again.
+                void* buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
+                auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
+                insert_skip_message(*message_header, queue_size_bytes - current_write_offset - sizeof(MessageHeader));
+
+                global_header->write_offset.store(sizeof(GlobalHeader), std::memory_order_release);
+                // need to try again here too
+            }
+            // any other conditions require that we try again.
         }
-
-        if (insert_skip_message_at_current) {
-            void* buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
-            auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
-            insert_skip_message(*message_header, queue_size_bytes - current_write_offset - sizeof(MessageHeader));
-
-            // if we had to insert a skip message, bad luck! we'll recurse and try to claim again.
-            // TODO: not a big deal of the recursion idea but logically its correct. Naybe I break this out into a separate function.
-            return blocking_claim_buffer(size);
-        }
-
-        // make sure we aren't overwriting any bytes in a region being read by a slow reader
-        wait_for_slot_until(current_write_offset, size_required);
-
-        // ok now we have a slot for writing. Try and block to write in at current_write_offset
-        void* new_buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
-        auto* new_message_header = static_cast<MessageHeader*>(new_buffer_ptr);
-
-        // DEBUG ONLY PLS REMOVE
-        const auto old_flags = static_cast<uint32_t>(new_message_header->commit_flag.load(std::memory_order_relaxed));
-
-        new_message_header->message_size = size;
-        spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes), old_flags={}", current_write_offset, size, size_required, std::to_string(old_flags));
-        return SpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
     }
-
 
     std::optional<SpscIpcQueueRaiiWriterWrapper> SpscIpcQueue::nonblocking_claim_buffer(size_t size) {
         return std::nullopt;
@@ -162,9 +152,7 @@ namespace message_transport {
                 spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", current_read_offset, message_header->message_size, total_message_len);
                 return SpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
             }
-            case CommitFlag::NOT_READY: {
-                return std::nullopt;
-            }
+            case CommitFlag::NOT_READY:
             default: {
                 return std::nullopt;
             }
@@ -175,6 +163,16 @@ namespace message_transport {
         const auto total_message_len = header.message_size + sizeof(MessageHeader);
         header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
         global_header->read_offset.fetch_add(total_message_len, std::memory_order_release);
+
+        // check if the new slot is a skip message, and if so, skip over it too.
+        auto* next_message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + global_header->read_offset.load(std::memory_order_acquire));
+        if (next_message_header->type == MessageType::PADDING) {
+            spdlog::info("Released message at offset {} with size {}, bytes (total size with header: {} bytes), found skip message with size {}, bytes, skipping", reinterpret_cast<uint8_t*>(&header) - reinterpret_cast<uint8_t*>(global_header), header.message_size, total_message_len, next_message_header->message_size);
+            next_message_header->commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
+            global_header->read_offset.store(sizeof(MessageHeader), std::memory_order_release);
+        } else {
+            spdlog::info("Released message at offset {} with size {}, bytes (total size with header: {} bytes)", reinterpret_cast<uint8_t*>(&header) - reinterpret_cast<uint8_t*>(global_header), header.message_size, total_message_len);
+        }
     }
 
     void SpscIpcQueue::read_buffer() {
