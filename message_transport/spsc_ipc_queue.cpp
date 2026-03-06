@@ -78,24 +78,39 @@ namespace message_transport {
             throw std::runtime_error("Cannot claim buffer for message with size 0 bytes");
         }
 
-        const auto size_required = size + sizeof(MessageHeader);
+        const auto total_message_len = size + sizeof(MessageHeader);
+
+        // only allow committing if we can buffer an extra message at the end of the queue
+        const auto size_required = total_message_len + sizeof(MessageHeader);
 
         while (true) {
             uint64_t current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
-            uint64_t new_write_offset = current_write_offset + size_required;
+            uint64_t new_write_offset = current_write_offset + total_message_len;
 
             while(!global_header->write_offset.compare_exchange_weak(current_write_offset, new_write_offset, std::memory_order_release, std::memory_order_relaxed)) {
                 // if this compare fails, we _might_ have lost the lock on the current writable region, or it might be a spurious failure.
                 // Try again.
                 current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
-                new_write_offset = current_write_offset + size_required;
+                new_write_offset = current_write_offset + total_message_len;
             }
 
+            // example, queue size = 16
+            // header size is 2
+
+            // thread 1 claims 12 with data size 2
+            // thread 2 claims 16 with data size 2
+
+            // thread 1 claims 11 with data size 2
+            // thread 2 claims 15 with data size 2
+
+            // thread 1 claims 10 with data size 2
+            // thread 2 claims 14 with data size 2
+
             // once we're here we know we've claimed a buffer location. see if its valid or not.
-            if ((current_write_offset + size_required) < queue_size_bytes) {
+            if ((current_write_offset + size_required) <= queue_size_bytes) [[likely]] { 
                 // we successfully claimed a region for writing, and the new write offset is within the bounds of the queue,
                 // so we can break out of the loop and write our message.
-                wait_for_slot_until(current_write_offset, size_required);
+                wait_for_slot_until(current_write_offset, total_message_len);
 
                 // ok now we have a slot for writing. Try and block to write in at current_write_offset
                 void* new_buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
@@ -107,7 +122,9 @@ namespace message_transport {
                 new_message_header->message_size = size;
                 spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes), old_flags={}", current_write_offset, size, size_required, std::to_string(old_flags));
                 return SpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
-            } else if ((current_write_offset + sizeof(MessageHeader)) < queue_size_bytes) {
+
+            } else if ((current_write_offset + sizeof(MessageHeader)) <= queue_size_bytes) {
+
                 // we claimed successfully, but must write a skip message and try again.
                 void* buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
                 auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
@@ -164,14 +181,17 @@ namespace message_transport {
         header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
         global_header->read_offset.fetch_add(total_message_len, std::memory_order_release);
 
+        const auto release_offset = std::distance(reinterpret_cast<uint8_t*>(global_header), reinterpret_cast<uint8_t*>(&header));
+
         // check if the new slot is a skip message, and if so, skip over it too.
         auto* next_message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + global_header->read_offset.load(std::memory_order_acquire));
         if (next_message_header->type == MessageType::PADDING) {
-            spdlog::info("Released message at offset {} with size {}, bytes (total size with header: {} bytes), found skip message with size {}, bytes, skipping", reinterpret_cast<uint8_t*>(&header) - reinterpret_cast<uint8_t*>(global_header), header.message_size, total_message_len, next_message_header->message_size);
+            const auto skip_offset = std::distance(reinterpret_cast<uint8_t*>(global_header), reinterpret_cast<uint8_t*>(next_message_header));
+            spdlog::info("Released message at offset {} with size {}, bytes (total size with header: {} bytes), found skip message at {} with size {} bytes, skipping", release_offset, header.message_size, total_message_len, skip_offset, next_message_header->message_size);
             next_message_header->commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
-            global_header->read_offset.store(sizeof(MessageHeader), std::memory_order_release);
+            global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
         } else {
-            spdlog::info("Released message at offset {} with size {}, bytes (total size with header: {} bytes)", reinterpret_cast<uint8_t*>(&header) - reinterpret_cast<uint8_t*>(global_header), header.message_size, total_message_len);
+            spdlog::info("Released message at offset {} with size {}, bytes (total size with header: {} bytes)", release_offset, header.message_size, total_message_len);
         }
     }
 
@@ -208,14 +228,14 @@ namespace message_transport {
         // make sure the reader is out of our way
         wait_for_slot_until(current_skip_message_position, padded_bytes + sizeof(MessageHeader));
 
+        // be nice and set these to 0
+        auto* message_payload = static_cast<void*>(reinterpret_cast<uint8_t*>(&header) + sizeof(MessageHeader));
+        std::memset(message_payload, 0, padded_bytes);
+
         header.message_size = padded_bytes;
         header.type = MessageType::PADDING;
         header.commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
 
         spdlog::info("Inserted skip message at offset {} with size {} bytes to wrap around the queue", current_skip_message_position, padded_bytes);
-
-        // be nice and set these to 0
-        auto* message_payload = static_cast<void*>(reinterpret_cast<uint8_t*>(&header) + sizeof(MessageHeader));
-        std::memset(message_payload, 0, padded_bytes);
     }
 }
