@@ -9,53 +9,52 @@
 
 #include <spdlog/spdlog.h>
 
-#include "spsc_ipc_queue_headers.h"
+#include "mpsc_ipc_queue_headers.h"
 
 using namespace std::chrono_literals;
 
 namespace message_transport {
 
     // forward decl
-    class SpscIpcQueueRaiiWriterWrapper;
-    class SpscIpcQueueRaiiReaderWrapper;
+    class MpscIpcQueueRaiiWriterWrapper;
+    class MpscIpcQueueRaiiReaderWrapper;
 
     // some checkers for safety
     // static_assert(std::atomic<uint64_t>::is_always_lock_free);
 
     /**
-     * This class implements a single-producer, single-consumer (SPSC) inter-process communication (IPC) queue.
+     * This class implements a multi-producer, single-consumer (MPSC) inter-process communication (IPC) queue.
      * 
-     * It provides a thread-safe mechanism for one producer to send messages to one consumer across process boundaries.
+     * It provides a thread-safe mechanism for multiple producers to send messages to one consumer across process boundaries.
      * 
-     * This class will support arbitrary message sizes and will handle synchronization internally to ensure safe communication between the producer and consumer.
+     * This class will support arbitrary message sizes and will handle synchronization internally to ensure safe communication between the producer(s) and consumer.
      * 
      * The implementation will use shared memory and synchronization primitives to achieve efficient communication without busy-waiting.
      * 
      * TODO: This implementation could benefit from a "hot swap" clean buffer/dirty buffer paradigm. Probably not a huge deal
      * to leave as is for now but its something worth investigating at some point.
      */
-    class SpscIpcQueue {
+    class MpscIpcQueue {
 
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
         static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
     public:
-        using CallbackModel = std::function<void(SpscIpcQueueRaiiReaderWrapper)>;
-        SpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, std::optional<CallbackModel> callback = std::nullopt);
-        ~SpscIpcQueue();
+        using CallbackModel = std::function<void(MpscIpcQueueRaiiReaderWrapper)>;
+        MpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, std::optional<CallbackModel> callback = std::nullopt);
+        ~MpscIpcQueue();
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 
         // returned wrapper, the buffer will be committed to the queue.
-        SpscIpcQueueRaiiWriterWrapper blocking_claim_buffer(size_t size);
+        MpscIpcQueueRaiiWriterWrapper blocking_claim_buffer(size_t size);
 
-        std::optional<SpscIpcQueueRaiiWriterWrapper> nonblocking_claim_buffer(size_t size);
+        std::optional<MpscIpcQueueRaiiWriterWrapper> nonblocking_claim_buffer(size_t size);
 
         // public API that exposes a single, non-blocking call for the consumer to poll for new messages in the queue.
         // This method will return immediately if there are no new messages available, and will return a wrapper around 
         // the message buffer if a new message is available for the consumer to read.
-        std::optional<SpscIpcQueueRaiiReaderWrapper> poll_buffer();
+        std::optional<MpscIpcQueueRaiiReaderWrapper> poll_buffer();
 
         void release_buffer(MessageHeader& header);
-        SpscIpcQueueRaiiWriterWrapper blocking_wait_at_slot(MessageHeader& header);
 
     private:
 

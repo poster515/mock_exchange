@@ -9,8 +9,8 @@ find_package(spdlog REQUIRED)
 
 # Library
 add_library(messaging SHARED
-    ${PUBLIC_INCLUDE_DIR}/spsc_ipc_queue.h
-    spsc_ipc_queue.cpp
+    ${PUBLIC_INCLUDE_DIR}/mpsc_ipc_queue.h
+    mpsc_ipc_queue.cpp
 )
 
 target_include_directories(messaging PUBLIC

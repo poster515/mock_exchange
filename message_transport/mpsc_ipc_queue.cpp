@@ -1,5 +1,5 @@
-#include "spsc_ipc_queue.h"
-#include "spsc_ipc_queue_element_wrapper.h"
+#include "mpsc_ipc_queue.h"
+#include "mpsc_ipc_queue_element_wrapper.h"
 
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -11,7 +11,7 @@
 
 
 namespace message_transport {
-    SpscIpcQueue::SpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, std::optional<CallbackModel> callback)
+    MpscIpcQueue::MpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, std::optional<CallbackModel> callback)
             : queue_size_bytes(queue_size_bytes) 
             , dispatcher(callback)
             , is_writer(!callback.has_value()) {
@@ -62,12 +62,12 @@ namespace message_transport {
         }
     }
 
-    SpscIpcQueue::~SpscIpcQueue() {
+    MpscIpcQueue::~MpscIpcQueue() {
         munmap(global_header, queue_size_bytes);
         close(fd);
     }
 
-    SpscIpcQueueRaiiWriterWrapper SpscIpcQueue::blocking_claim_buffer(size_t size) {
+    MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::blocking_claim_buffer(size_t size) {
         
         // determine a starting point in the shared memory for the producer to write the message, 
         // and return a wrapper that will commit the buffer to the queue upon destruction.
@@ -94,18 +94,6 @@ namespace message_transport {
                 new_write_offset = current_write_offset + total_message_len;
             }
 
-            // example, queue size = 16
-            // header size is 2
-
-            // thread 1 claims 12 with data size 2
-            // thread 2 claims 16 with data size 2
-
-            // thread 1 claims 11 with data size 2
-            // thread 2 claims 15 with data size 2
-
-            // thread 1 claims 10 with data size 2
-            // thread 2 claims 14 with data size 2
-
             // once we're here we know we've claimed a buffer location. see if its valid or not.
             if ((current_write_offset + size_required) <= queue_size_bytes) [[likely]] { 
                 // we successfully claimed a region for writing, and the new write offset is within the bounds of the queue,
@@ -124,7 +112,7 @@ namespace message_transport {
                 } else {
                     new_message_header->message_size = size;
                     spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes), old_flags={}", current_write_offset, size, size_required, std::to_string(old_flags));
-                    return SpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
+                    return MpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
                 }
                 
             } else if ((current_write_offset + sizeof(MessageHeader)) <= queue_size_bytes) {
@@ -141,11 +129,11 @@ namespace message_transport {
         }
     }
 
-    std::optional<SpscIpcQueueRaiiWriterWrapper> SpscIpcQueue::nonblocking_claim_buffer(size_t size) {
+    std::optional<MpscIpcQueueRaiiWriterWrapper> MpscIpcQueue::nonblocking_claim_buffer(size_t size) {
         return std::nullopt;
     }
 
-    std::optional<SpscIpcQueueRaiiReaderWrapper> SpscIpcQueue::poll_buffer() {
+    std::optional<MpscIpcQueueRaiiReaderWrapper> MpscIpcQueue::poll_buffer() {
         if (is_writer) {
             throw std::runtime_error("Producer cannot poll for messages in the queue");
         }
@@ -171,7 +159,7 @@ namespace message_transport {
 
                 // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
                 spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", current_read_offset, message_header->message_size, total_message_len);
-                return SpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
+                return MpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
             }
             case CommitFlag::NOT_READY:
             default: {
@@ -180,7 +168,7 @@ namespace message_transport {
         }
     }
 
-    void SpscIpcQueue::release_buffer(MessageHeader& header) {
+    void MpscIpcQueue::release_buffer(MessageHeader& header) {
         const auto total_message_len = header.message_size + sizeof(MessageHeader);
         header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
         global_header->read_offset.fetch_add(total_message_len, std::memory_order_release);
@@ -199,14 +187,14 @@ namespace message_transport {
         }
     }
 
-    void SpscIpcQueue::read_buffer() {
+    void MpscIpcQueue::read_buffer() {
         // const auto current_read_offset = global_header->read_offset.load(std::memory_order_acquire);
         // const auto current_message_position = sizeof(GlobalHeader) + current_read_offset;
         // const auto current_message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + current_message_position);
         // const auto current_message_size = current_message_header->message_size.load(std::memory_order_acquire);
         
         // // dispatch message to consumer at some point here.
-        // SpscIpcQueueRaiiReaderWrapper wrapper(reinterpret_cast<uint8_t*>(current_message_header), current_message_size + sizeof(MessageHeader));
+        // MpscIpcQueueRaiiReaderWrapper wrapper(reinterpret_cast<uint8_t*>(current_message_header), current_message_size + sizeof(MessageHeader));
         // (*dispatcher)(std::move(wrapper));
 
         // // since we are the only reader we can safely increment the reader offset
@@ -224,7 +212,7 @@ namespace message_transport {
         // current_message_header->flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_release);
     }
 
-    void SpscIpcQueue::insert_skip_message(MessageHeader& header, size_t padded_bytes) {
+    void MpscIpcQueue::insert_skip_message(MessageHeader& header, size_t padded_bytes) {
         const auto current_skip_message_position = std::distance(reinterpret_cast<uint8_t*>(global_header), reinterpret_cast<uint8_t*>(&header));
         
         spdlog::info("Waiting to insert skip message at offset {} with size {} bytes to wrap around the queue", current_skip_message_position, padded_bytes);

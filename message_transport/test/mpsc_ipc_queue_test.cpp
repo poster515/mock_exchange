@@ -8,14 +8,14 @@
 #include <unordered_set>
 #include <sys/mman.h>
 
-#include "spsc_ipc_queue.h"
-#include "spsc_ipc_queue_element_wrapper.h"
+#include "mpsc_ipc_queue.h"
+#include "mpsc_ipc_queue_element_wrapper.h"
 
 using namespace message_transport;
 
-class SpscIpcQueueTest : public ::testing::Test {
+class MpscIpcQueueTest : public ::testing::Test {
 protected:
-    static constexpr const char* SHM_NAME = "/spsc_ipc_queue_test";
+    static constexpr const char* SHM_NAME = "/mpsc_ipc_queue_test";
     static constexpr size_t QUEUE_SIZE = 4096;
 
     void SetUp() override {
@@ -27,16 +27,16 @@ protected:
     }
 };
 
-TEST_F(SpscIpcQueueTest, BasicWriteAndRead) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, BasicWriteAndRead) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
 
     std::string_view test_data = "Hello, World!";
 
     auto wrapper = writer.blocking_claim_buffer(test_data.size());
     ASSERT_TRUE(wrapper.write_to_buffer(test_data.data(), test_data.size()));
-    wrapper.~SpscIpcQueueRaiiWriterWrapper(); // explicitly call the destructor to commit the message to the queue
+    wrapper.~MpscIpcQueueRaiiWriterWrapper(); // explicitly call the destructor to commit the message to the queue
 
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
@@ -47,10 +47,10 @@ TEST_F(SpscIpcQueueTest, BasicWriteAndRead) {
     EXPECT_EQ(read_data, test_data);
 }
 
-TEST_F(SpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
 
     const size_t msg_size = 64;
     const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader);
@@ -103,11 +103,11 @@ TEST_F(SpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
     EXPECT_EQ(final_value, 999);
 }
 
-TEST_F(SpscIpcQueueTest, BasicQueueWrapping) {
+TEST_F(MpscIpcQueueTest, BasicQueueWrapping) {
     const size_t SMALL_QUEUE_SIZE = 128;
-    SpscIpcQueue writer(SHM_NAME, SMALL_QUEUE_SIZE, std::nullopt);
+    MpscIpcQueue writer(SHM_NAME, SMALL_QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, SMALL_QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, SMALL_QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
 
     std::string_view message = "this_is_a_long_message";
     const auto iters_to_fill_buffer = (SMALL_QUEUE_SIZE  - sizeof(message_transport::GlobalHeader) - sizeof(message_transport::MessageHeader)) / (message.size() + sizeof(message_transport::MessageHeader));
@@ -142,10 +142,10 @@ TEST_F(SpscIpcQueueTest, BasicQueueWrapping) {
     }
 }
 
-TEST_F(SpscIpcQueueTest, MultipleMessagesSequential) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, MultipleMessagesSequential) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
 
     const std::vector<std::string_view> messages = {"msg1", "msg2", "msg3"};
 
@@ -164,10 +164,10 @@ TEST_F(SpscIpcQueueTest, MultipleMessagesSequential) {
     }
 }
 
-TEST_F(SpscIpcQueueTest, SlowProducerFastConsumer) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, SlowProducerFastConsumer) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
 
     std::vector<int> written_values;
     std::vector<int> read_values;
@@ -207,10 +207,10 @@ TEST_F(SpscIpcQueueTest, SlowProducerFastConsumer) {
     }
 }
 
-TEST_F(SpscIpcQueueTest, FastProducerSlowConsumer) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, FastProducerSlowConsumer) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
 
     std::vector<int> written_values;
     std::vector<int> read_values;
@@ -251,12 +251,12 @@ TEST_F(SpscIpcQueueTest, FastProducerSlowConsumer) {
     }
 }
 
-TEST_F(SpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
+TEST_F(MpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
 
     const auto SMALL_QUEUE_SIZE_BYTES = 128;
-    SpscIpcQueue writer(SHM_NAME, SMALL_QUEUE_SIZE_BYTES, std::nullopt);
+    MpscIpcQueue writer(SHM_NAME, SMALL_QUEUE_SIZE_BYTES, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, SMALL_QUEUE_SIZE_BYTES, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, SMALL_QUEUE_SIZE_BYTES, [](MpscIpcQueueRaiiWrapper){});
 
     std::vector<uint64_t> written_values;
     std::vector<uint64_t> read_values;
@@ -298,29 +298,29 @@ TEST_F(SpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
     }
 }
 
-TEST_F(SpscIpcQueueTest, ExceedQueueCapacity) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, ExceedQueueCapacity) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
 
     ASSERT_THROW(auto wrapper = writer.blocking_claim_buffer(QUEUE_SIZE + 1), std::runtime_error);
 }
 
-TEST_F(SpscIpcQueueTest, ReaderCannotClaim) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, ReaderCannotClaim) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
     EXPECT_THROW(reader.blocking_claim_buffer(64), std::runtime_error);
 }
 
-TEST_F(SpscIpcQueueTest, WriterCannotPoll) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, WriterCannotPoll) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
 
     EXPECT_THROW(writer.poll_buffer(), std::runtime_error);
 }
 
-TEST_F(SpscIpcQueueTest, LargeMessageSequence) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, LargeMessageSequence) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
 
     const size_t large_msg_size = 512;
     std::vector<std::vector<char>> written_data;
@@ -361,11 +361,11 @@ TEST_F(SpscIpcQueueTest, LargeMessageSequence) {
         EXPECT_EQ(written_data[i], read_data[i]);
     }
 }
-TEST_F(SpscIpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
+TEST_F(MpscIpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
     const auto SMALL_QUEUE_SIZE_BYTES = 512;
-    SpscIpcQueue writer(SHM_NAME, SMALL_QUEUE_SIZE_BYTES, std::nullopt);
+    MpscIpcQueue writer(SHM_NAME, SMALL_QUEUE_SIZE_BYTES, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, SMALL_QUEUE_SIZE_BYTES, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, SMALL_QUEUE_SIZE_BYTES, [](MpscIpcQueueRaiiWrapper){});
 
     struct TestMessage {
         uint8_t byte_val;
@@ -422,10 +422,10 @@ TEST_F(SpscIpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
     }
 }
 
-TEST_F(SpscIpcQueueTest, LongRunningProducerConsumer) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, LongRunningProducerConsumer) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
 
     const size_t NUM_MESSAGES = 4096;
     std::vector<uint64_t> written_values;
@@ -467,10 +467,10 @@ TEST_F(SpscIpcQueueTest, LongRunningProducerConsumer) {
     }
 }
 
-TEST_F(SpscIpcQueueTest, TwoProducersOneConsumer) {
-    SpscIpcQueue writer1(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
+    MpscIpcQueue writer1(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
 
     const size_t msg_size = sizeof(int32_t);
     const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader);
@@ -551,10 +551,10 @@ TEST_F(SpscIpcQueueTest, TwoProducersOneConsumer) {
     EXPECT_EQ(written_values, read_values);
 }
 
-TEST_F(SpscIpcQueueTest, MultiProducerDifferentTypes) {
-    SpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
+TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
+    MpscIpcQueue writer(SHM_NAME, QUEUE_SIZE, std::nullopt);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    SpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](SpscIpcQueueRaiiWrapper){});
+    MpscIpcQueue reader(SHM_NAME, QUEUE_SIZE, [](MpscIpcQueueRaiiWrapper){});
 
     const int NUM_MESSAGES = 50;
     std::unordered_set<uint64_t> written_values;

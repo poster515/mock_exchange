@@ -20,7 +20,7 @@ Key components
 - Shared Memory Buffers
     - Memory-mapped files (mmap) or POSIX shared memory.
     - One ring per logical channel (e.g., gateway->matching, matching->md).
-    - SPSC where possible; MPSC variants with sequence allocation when needed.
+    - MPSC variants with sequence allocation.
     - Page-aligned, power-of-two sizing for lock-free modulo.
     - Optional hugepages/mlock to avoid page faults.
 
