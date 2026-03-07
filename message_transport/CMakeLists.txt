@@ -14,7 +14,7 @@ add_library(messaging SHARED
 )
 
 target_include_directories(messaging PUBLIC
-    ${PUBLIC_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/public
 )
 
 target_link_libraries(messaging PUBLIC
@@ -23,3 +23,11 @@ target_link_libraries(messaging PUBLIC
 
 # Unit Tests
 add_subdirectory(test)
+
+# Producer Binary
+add_executable(producer test_producer.cpp)
+target_link_libraries(producer PRIVATE messaging)
+
+# Consumer Binary
+add_executable(consumer test_consumer.cpp)
+target_link_libraries(consumer PRIVATE messaging)

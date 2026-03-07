@@ -1,5 +1,5 @@
-#include "mpsc_ipc_queue.h"
-#include "mpsc_ipc_queue_element_wrapper.h"
+#include "messaging/mpsc_ipc_queue.h"
+#include "messaging/mpsc_ipc_queue_element_wrapper.h"
 
 #include <sys/mman.h>
 #include <sys/stat.h>

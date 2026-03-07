@@ -35,10 +35,10 @@ namespace message_transport {
      * to leave as is for now but its something worth investigating at some point.
      */
     class MpscIpcQueue {
-
+    public:
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
         static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
-    public:
+
         using CallbackModel = std::function<void(MpscIpcQueueRaiiReaderWrapper)>;
         MpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, std::optional<CallbackModel> callback = std::nullopt);
         ~MpscIpcQueue();

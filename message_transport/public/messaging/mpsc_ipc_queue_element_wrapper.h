@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <cstring>
 
-#include "mpsc_ipc_queue.h"
+#include "messaging/mpsc_ipc_queue.h"
 
 namespace message_transport {
 

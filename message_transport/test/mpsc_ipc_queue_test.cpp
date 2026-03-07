@@ -8,8 +8,8 @@
 #include <unordered_set>
 #include <sys/mman.h>
 
-#include "mpsc_ipc_queue.h"
-#include "mpsc_ipc_queue_element_wrapper.h"
+#include "messaging/mpsc_ipc_queue.h"
+#include "messaging/mpsc_ipc_queue_element_wrapper.h"
 
 using namespace message_transport;
 

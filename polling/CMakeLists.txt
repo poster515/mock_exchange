@@ -5,6 +5,7 @@ set(includes
     ${public_include_folder}/IPollRunnner.h
     ${public_include_folder}/PollableConcept.h
     ${public_include_folder}/RuntimePollRunnerBuilder.h
+    ${public_include_folder}/RuntimePollRunner.h
 )
 
 
