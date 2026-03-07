@@ -11,21 +11,22 @@
 
 
 namespace message_transport {
-    MpscIpcQueue::MpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, std::optional<CallbackModel> callback)
-            : queue_size_bytes(queue_size_bytes) 
-            , dispatcher(callback)
-            , is_writer(!callback.has_value()) {
+    MpscIpcQueue::MpscIpcQueue(MpscQueueParameters&& params)
+            : queue_size_bytes(params.queue_size) 
+            , dispatcher(params.callback)
+            , is_writer(params.is_writer) {
 
         if (queue_size_bytes > MAX_QUEUE_SIZE_BYTES) {
             throw std::runtime_error("Queue size exceeds maximum allowed size of " + std::to_string(MAX_QUEUE_SIZE_BYTES) + " bytes");
         }
 
-        fd = shm_open(shm_file_name.data(), O_CREAT | O_RDWR, 0666);
+        fd = shm_open(params.file_name.data(), O_CREAT | O_RDWR, 0666);
 
         if (fd == -1) {
-            throw std::runtime_error("Failed to open shared memory at file " + std::string(shm_file_name));
+            throw std::runtime_error("Failed to open shared memory at file " + std::string(params.file_name));
         }
 
+        // TODO: for some reason checking this return code fails in unit tests.
         std::ignore = ftruncate(fd, queue_size_bytes);
         void* ptr = mmap(nullptr, queue_size_bytes,
                         PROT_READ | PROT_WRITE,
@@ -49,9 +50,6 @@ namespace message_transport {
             // yeet the whole queue to a known value (0 = MESSAGE_UNKNOWN which is ok for writing)
             memset(reinterpret_cast<uint8_t*>(global_header) + sizeof(GlobalHeader), 0, queue_size_bytes - sizeof(GlobalHeader));
         } else {
-            // TODO: I want to think about what this should do for the reader.
-            //      I think I'd prefer to set a "is_initalized" flag that we check and then
-            //      allow the user to specify the wait policy.
 
             // if we're the reader, we need to wait until the writer has initialized the global header before we can safely read from it.
             while (!global_header->has_writer.load(std::memory_order_acquire)) {
@@ -59,10 +57,20 @@ namespace message_transport {
                 // in a real implementation, we would want to use a more efficient synchronization mechanism here (e.g. futexes or condition variables) to avoid busy waiting and reduce CPU usage.
                 std::this_thread::yield();
             }
+
+            if (params.callback.has_value()) {
+                read_thread = std::thread([this](){
+                    while(this->read_buffer());
+                });
+            }
         }
     }
 
     MpscIpcQueue::~MpscIpcQueue() {
+        if (read_thread.joinable()) {
+            read_thread.join();
+        }
+
         munmap(global_header, queue_size_bytes);
         close(fd);
     }
@@ -104,14 +112,12 @@ namespace message_transport {
                 void* new_buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
                 auto* new_message_header = static_cast<MessageHeader*>(new_buffer_ptr);
 
-                // DEBUG ONLY PLS REMOVE
                 const auto old_flags = static_cast<uint32_t>(new_message_header->commit_flag.load(std::memory_order_relaxed));
-
                 if (old_flags != static_cast<uint32_t>(CommitFlag::NOT_READY)) {
                     spdlog::warn("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes) but its claimed!! skipping ", current_write_offset, size, size_required);
                 } else {
                     new_message_header->message_size = size;
-                    spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes), old_flags={}", current_write_offset, size, size_required, std::to_string(old_flags));
+                    spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes)", current_write_offset, size, size_required);
                     return MpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), size_required);
                 }
                 
@@ -187,29 +193,13 @@ namespace message_transport {
         }
     }
 
-    void MpscIpcQueue::read_buffer() {
-        // const auto current_read_offset = global_header->read_offset.load(std::memory_order_acquire);
-        // const auto current_message_position = sizeof(GlobalHeader) + current_read_offset;
-        // const auto current_message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + current_message_position);
-        // const auto current_message_size = current_message_header->message_size.load(std::memory_order_acquire);
-        
-        // // dispatch message to consumer at some point here.
-        // MpscIpcQueueRaiiReaderWrapper wrapper(reinterpret_cast<uint8_t*>(current_message_header), current_message_size + sizeof(MessageHeader));
-        // (*dispatcher)(std::move(wrapper));
-
-        // // since we are the only reader we can safely increment the reader offset
-        // const auto next_read_offset = current_read_offset + sizeof(MessageHeader) + current_message_size;
-        // auto& header_at_next_read_offset = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + next_read_offset);
-        // if (header_at_next_read_offset.commit_flag.load(std::memory_order_acquire) == CommitFlag::SKIPPED) {
-        //     // if the next message is a skip message, we need to skip over it and move the read offset to the next message after the skip message.
-        //     header_at_next_read_offset.commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_relaxed);
-        //     global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
-        // } else {
-        //     global_header->read_offset.store(next_read_offset, std::memory_order_release);
-        // }
-
-        // // finally, mark as available
-        // current_message_header->flags.store(MESSAGE_AVAILABLE_FOR_WRITE, std::memory_order_release);
+    bool MpscIpcQueue::read_buffer() {
+        auto read_wrapper = poll_buffer();
+        if (read_wrapper.has_value()) {
+            return (*dispatcher)(std::move(*read_wrapper));
+        }
+        // if there's no return value - indicate that we want to continue to poll.
+        return true;
     }
 
     void MpscIpcQueue::insert_skip_message(MessageHeader& header, size_t padded_bytes) {

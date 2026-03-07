@@ -9,7 +9,14 @@
 #include "messaging/mpsc_ipc_queue_element_wrapper.h"
 
 int main() {
-    message_transport::MpscIpcQueue queue {"/dev/shm/queue_test", message_transport::MpscIpcQueue::MAX_QUEUE_SIZE_BYTES, [](message_transport::MpscIpcQueueRaiiReaderWrapper){}};
+    message_transport::MpscIpcQueue queue(
+        message_transport::MpscIpcQueue::MpscQueueParameters{
+            .file_name = "/dev/shm/queue_test",
+            .queue_size = message_transport::MpscIpcQueue::MAX_QUEUE_SIZE_BYTES,
+            .is_writer = false,
+            .callback = std::nullopt
+        }
+    );
     std::set<uint32_t> received_values;
 
     spdlog::info("Consumer started, waiting for 1000 values");

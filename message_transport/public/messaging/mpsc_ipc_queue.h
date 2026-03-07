@@ -20,16 +20,17 @@ namespace message_transport {
     class MpscIpcQueueRaiiReaderWrapper;
 
     // some checkers for safety
-    // static_assert(std::atomic<uint64_t>::is_always_lock_free);
+    static_assert(std::atomic<uint64_t>::is_always_lock_free);
 
     /**
      * This class implements a multi-producer, single-consumer (MPSC) inter-process communication (IPC) queue.
      * 
      * It provides a thread-safe mechanism for multiple producers to send messages to one consumer across process boundaries.
      * 
-     * This class will support arbitrary message sizes and will handle synchronization internally to ensure safe communication between the producer(s) and consumer.
+     * This class supports arbitrary message sizes and handles synchronization internally to ensure safe communication between the producer(s) and consumer.
      * 
-     * The implementation will use shared memory and synchronization primitives to achieve efficient communication without busy-waiting.
+     * The implementation uses shared memory and synchronization primitives to achieve efficient communication without busy-waiting.
+     * If a callback is provided, a new thread will be spawned which constantly polls the buffer. See consumer.cpp for an example.
      * 
      * TODO: This implementation could benefit from a "hot swap" clean buffer/dirty buffer paradigm. Probably not a huge deal
      * to leave as is for now but its something worth investigating at some point.
@@ -38,9 +39,16 @@ namespace message_transport {
     public:
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
         static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
+        using CallbackModel = std::function<bool(MpscIpcQueueRaiiReaderWrapper)>;
 
-        using CallbackModel = std::function<void(MpscIpcQueueRaiiReaderWrapper)>;
-        MpscIpcQueue(std::string_view shm_file_name, size_t queue_size_bytes, std::optional<CallbackModel> callback = std::nullopt);
+        struct MpscQueueParameters {
+            std::string_view file_name;
+            size_t queue_size;
+            bool is_writer;
+            std::optional<CallbackModel> callback;
+        };
+        
+        MpscIpcQueue(MpscQueueParameters&& params);
         ~MpscIpcQueue();
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 
@@ -74,9 +82,12 @@ namespace message_transport {
 
         int fd;
 
+        std::thread read_thread;
+
         // if the queue owner is the reader this can optionally be looped forever, reading messages
         // as they become available in the queue, and then processing them using some user-provided callback function.
-        void read_buffer();
+        // returns whether the queue should continue to poll or not.
+        bool read_buffer();
 
         // TODO: implement a callback_model concept and establish ownership semantics for the queue that allow us to
         // have multiple producers and/or consumers, and to allow producers and consumers to dynamically join and leave

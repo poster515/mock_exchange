@@ -11,16 +11,16 @@ Goals
 - Scalable per-core / per-channel throughput.
 
 Design overview
-- Fast-path: lock-free shared-memory circular buffers (ring buffers) memory-mapped to files for IPC within a host.
+- Fast-path: lock-free shared-memory circular buffer (ring buffer) memory-mapped to a file for IPC within a host.
 - Durability: append-only WAL + embedded key-value store (recommended: RocksDB or LMDB) for critical persistent state and sparse recovery snapshots.
 - HA: optional multi-node replication (Raft or equivalent) for persistent state; active-active or active-standby topologies for message ingress.
 - Safety: per-message checksums, sequence numbers, and durable checkpoints.
 
 Key components
-- Shared Memory Buffers
-    - Memory-mapped files (mmap) or POSIX shared memory.
+- Shared Memory Buffer
+    - Memory-mapped file (mmap) or POSIX shared memory.
     - One ring per logical channel (e.g., gateway->matching, matching->md).
-    - MPSC variants with sequence allocation.
+    - MPSC-capable with sequence allocation.
     - Page-aligned, power-of-two sizing for lock-free modulo.
     - Optional hugepages/mlock to avoid page faults.
 
@@ -30,7 +30,7 @@ Key components
     - Batching for producers; group-ack for consumers.
 
 - Message format (compact)
-    - [8B seq][4B len][1B flags][N bytes payload][4B CRC]
+    - [8B seq][4B len][1B flags][N bytes payload]
     - Fixed header size, alignment rules documented in API.
 
 - Persistence & Recovery
