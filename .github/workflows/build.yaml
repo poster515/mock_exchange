@@ -14,12 +14,20 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Install dependencies
+    - name: Install CPP dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y python3 cmake build-essential
         pip install conan==2.*
         conan profile detect
+
+    - name: Install SBE and Java dependencies
+      run: |
+        sudo apt install default-jdk
+        java -version
+        cd ./gateway/public/parser
+        curl -L https://repo1.maven.org/maven2/uk/co/real-logic/sbe-all/1.30.0/sbe-all-1.30.0.jar -o sbe-all.jar
+        java -Dsbe.target.language=Cpp -Dsbe.output.dir=generated -jar sbe-all.jar order_entry.xml
 
     - name: Build
       run: |

@@ -1,0 +1,65 @@
+<sbe:messageSchema
+    xmlns:sbe="http://fixprotocol.io/2016/sbe"
+    package="exchange.order"
+    id="1"
+    version="1"
+    semanticVersion="1.0"
+    byteOrder="littleEndian">
+
+    <types>
+
+        <composite name="messageHeader">
+            <type name="blockLength" primitiveType="uint16"/>
+            <type name="templateId" primitiveType="uint16"/>
+            <type name="schemaId" primitiveType="uint16"/>
+            <type name="version" primitiveType="uint16"/>
+        </composite>
+
+        <enum name="Side" encodingType="uint8">
+            <validValue name="Buy">1</validValue>
+            <validValue name="Sell">2</validValue>
+        </enum>
+
+        <enum name="OrderType" encodingType="uint8">
+            <validValue name="Market">1</validValue>
+            <validValue name="Limit">2</validValue>
+        </enum>
+
+        <enum name="TimeInForce" encodingType="uint8">
+            <validValue name="Day">0</validValue>
+            <validValue name="IOC">3</validValue>
+        </enum>
+
+        <type name="price" primitiveType="int64"/>
+        <type name="qty" primitiveType="uint32"/>
+        <type name="orderId" primitiveType="uint64"/>
+        <type name="symbol" primitiveType="char" length="8"/>
+
+    </types>
+
+
+    <message name="NewOrderSingle" id="1">
+        <field name="orderId" id="1" type="orderId"/>
+        <field name="symbol" id="55" type="symbol"/>
+        <field name="side" id="54" type="Side"/>
+        <field name="orderQty" id="38" type="qty"/>
+        <field name="ordType" id="40" type="OrderType"/>
+        <field name="price" id="44" type="price"/>
+        <field name="timeInForce" id="59" type="TimeInForce"/>
+    </message>
+
+
+    <message name="CancelOrder" id="2">
+        <field name="orderId" id="1" type="orderId"/>
+        <field name="symbol" id="55" type="symbol"/>
+        <field name="side" id="54" type="Side"/>
+    </message>
+
+
+    <message name="ReplaceOrder" id="3">
+        <field name="orderId" id="1" type="orderId"/>
+        <field name="newQty" id="38" type="qty"/>
+        <field name="newPrice" id="44" type="price"/>
+    </message>
+
+</sbe:messageSchema>

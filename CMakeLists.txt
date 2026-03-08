@@ -8,4 +8,5 @@ project(sandbox LANGUAGES CXX)
 enable_testing()
 
 add_subdirectory(polling)
+add_subdirectory(gateway)
 add_subdirectory(message_transport)

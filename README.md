@@ -35,6 +35,18 @@ cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=build/Debug/generators/conan_toolchai
 cmake --build build -j8
 ```
 
+In order to use the gateways you'll need to generate the SBE headers/files first:
+
+```bash
+
+sudo apt install default-jdk
+java -version
+cd ./gateway/public/parser
+curl -L https://repo1.maven.org/maven2/uk/co/real-logic/sbe-all/1.30.0/sbe-all-1.30.0.jar -o sbe-all.jar
+java -Dsbe.target.language=Cpp -Dsbe.output.dir=generated -jar sbe-all.jar order_entry.xml
+
+```
+
 Obviously you'll want to confirm your choice of build type and folder location, but these will get you started.
 
 ## Testing & Scenarios
