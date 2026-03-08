@@ -37,5 +37,5 @@ jobs:
 
     - name: Run tests
       run: |
-        cd ./build/build/Release/message_transport/test
+        cd ./build/build/Release
         ctest --output-on-failure

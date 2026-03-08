@@ -1,14 +1,12 @@
-cmake_minimum_required(VERSION 3.10)
+
 project(messaging)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(PUBLIC_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/public/messaging)
 
 find_package(spdlog REQUIRED)
 
 # Library
-add_library(messaging SHARED
+add_library(messaging STATIC
     ${PUBLIC_INCLUDE_DIR}/mpsc_ipc_queue.h
     mpsc_ipc_queue.cpp
 )

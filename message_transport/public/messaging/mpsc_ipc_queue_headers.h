@@ -13,7 +13,7 @@ namespace message_transport {
         std::atomic<uint64_t> write_offset; // offset from the beginning of the raw mapped memory region to the next available buffer region for writing
         std::atomic<uint64_t> read_offset;  // offset from the beginning of the raw mapped memory region to the next available buffer region for reading
         std::atomic<uint64_t> queue_size_bytes; // total size of the queue in bytes, used for managing the shared memory and ensuring messages do not exceed the queue capacity
-        std::atomic<uint64_t> message_count; // total number of messages currently in the queue, used for monitoring and debugging purposes
+        std::atomic<uint64_t> message_count; // total number of messages written to the queue
         std::atomic_bool has_writer;
         std::atomic_bool has_reader;
     };

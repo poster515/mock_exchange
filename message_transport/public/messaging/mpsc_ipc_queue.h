@@ -39,6 +39,8 @@ namespace message_transport {
     public:
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
         static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
+
+        // Could make this a class template/concept but for now we'll leave it as a suboptimal function.
         using CallbackModel = std::function<bool(MpscIpcQueueRaiiReaderWrapper)>;
 
         struct MpscQueueParameters {
