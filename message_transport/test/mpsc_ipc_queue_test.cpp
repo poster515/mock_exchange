@@ -82,7 +82,7 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
     );
 
     const size_t msg_size = 64;
-    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader);
+    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader) - sizeof(message_transport::MessageHeader);
     const int num_messages_to_fill = available_space / (msg_size + sizeof(message_transport::MessageHeader));
 
     std::vector<int> written_values;
@@ -358,7 +358,7 @@ TEST_F(MpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
     std::vector<uint64_t> written_values;
     std::vector<uint64_t> read_values;
 
-    const auto iters_to_fill_buffer = (SMALL_QUEUE_SIZE  - sizeof(message_transport::GlobalHeader)) / (sizeof(uint64_t) + sizeof(message_transport::MessageHeader));
+    const auto iters_to_fill_buffer = (SMALL_QUEUE_SIZE  - sizeof(message_transport::GlobalHeader) - sizeof(message_transport::MessageHeader)) / (sizeof(uint64_t) + sizeof(message_transport::MessageHeader));
     const int NUM_MESSAGES = iters_to_fill_buffer * 1.5; // write enough messages to fill the buffer and cause wrap around
     std::cout << "Buffer can hold " << iters_to_fill_buffer << " messages, writing " << NUM_MESSAGES << " messages to force wrap around\n";
     auto producer = [&writer, &written_values]() {
@@ -653,64 +653,64 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     );
 
     const size_t msg_size = sizeof(int32_t);
-    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader);
+    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader) - sizeof(message_transport::MessageHeader);
     const size_t msgs_per_cycle = available_space / (msg_size + sizeof(message_transport::MessageHeader));
-    const int num_messages_per_producer = (3 * msgs_per_cycle / 2) - 1;
+    const int num_messages_per_producer = (4 * msgs_per_cycle / 2) - 1;
 
     std::cout << "Each producer will write " << num_messages_per_producer << " messages, total messages: " << num_messages_per_producer * 2 << "\n";
 
     std::unordered_set<int32_t> written_values;
     std::unordered_set<int32_t> read_values;
-    std::mutex written_mutex, read_mutex;
 
-    auto producer1 = [&writer1, &written_values, &written_mutex, num_messages_per_producer, msg_size]() {
+    std::unordered_set<int32_t> producer1_values;
+    auto producer1 = [&writer1, &producer1_values, num_messages_per_producer, msg_size]() {
         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
-            const int32_t value = i * 2; // producer 1 writes even numbers
+            const int32_t value = i;
             auto wrapper = writer1.blocking_claim_buffer(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
-            {
-                std::lock_guard lock(written_mutex);
-                written_values.insert(value);
-            }
+            producer1_values.insert(value);
         }
     };
 
-    auto producer2 = [&writer1, &written_values, &written_mutex, num_messages_per_producer, msg_size]() {
+    std::unordered_set<int32_t> producer2_values;
+    auto producer2 = [&writer1, &producer2_values, num_messages_per_producer, msg_size]() {
         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
             const int32_t value = i + num_messages_per_producer;
             auto wrapper = writer1.blocking_claim_buffer(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
-            {
-                std::lock_guard lock(written_mutex);
-                written_values.insert(value);
-            }
+            producer2_values.insert(value);
         }
     };
 
-    auto producer3 = [&writer1, &written_values, &written_mutex, num_messages_per_producer, msg_size]() {
+    std::unordered_set<int32_t> producer3_values;
+    auto producer3 = [&writer1, &producer3_values, num_messages_per_producer, msg_size]() {
         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
             const int32_t value = i + (num_messages_per_producer * 2);
             auto wrapper = writer1.blocking_claim_buffer(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
-            {
-                std::lock_guard lock(written_mutex);
-                written_values.insert(value);
-            }
+            producer3_values.insert(value);
         }
     };
 
-    auto consumer = [&reader, &read_values, &read_mutex, total_msgs = num_messages_per_producer * 3, msg_size]() {
+    std::unordered_set<int32_t> producer4_values;
+    auto producer4 = [&writer1, &producer4_values, num_messages_per_producer, msg_size]() {
+        for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
+            const int32_t value = i + (num_messages_per_producer * 3);
+            auto wrapper = writer1.blocking_claim_buffer(msg_size);
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
+            producer4_values.insert(value);
+        }
+    };
+
+    auto consumer = [&reader, &read_values, total_msgs = num_messages_per_producer * 4, msg_size]() {
         size_t count = 0;
         while (count < (total_msgs)) {
             auto wrapper = reader.poll_buffer();
             if (wrapper.has_value()) {
                 int value;
                 std::memcpy(&value, wrapper->get_buffer(), msg_size);
-                {
-                    std::lock_guard lock(read_mutex);
-                    read_values.insert(value);
-                    spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs - 2);
-                }
+                read_values.insert(value);
+                // spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs - 2);
                 count++;
             }
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
@@ -720,12 +720,19 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     std::thread producer1_thread(producer1);
     std::thread producer2_thread(producer2);
     std::thread producer3_thread(producer3);
+    std::thread producer4_thread(producer4);
     std::thread consumer_thread(consumer);
 
     producer1_thread.join();
     producer2_thread.join();
     producer3_thread.join();
+    producer4_thread.join();
     consumer_thread.join();
+
+    written_values.insert(producer1_values.begin(), producer1_values.end());
+    written_values.insert(producer2_values.begin(), producer2_values.end());
+    written_values.insert(producer3_values.begin(), producer3_values.end());
+    written_values.insert(producer4_values.begin(), producer4_values.end());
 
     EXPECT_EQ(written_values.size(), read_values.size());
     EXPECT_EQ(written_values, read_values);
@@ -752,49 +759,54 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
 
     const int NUM_MESSAGES = 50;
     std::unordered_set<uint64_t> written_values;
-    std::unordered_set<uint64_t> read_values;
-    std::mutex written_mutex, read_mutex;
 
-    auto byte_producer = [&writer, &written_values, &written_mutex, NUM_MESSAGES]() {
+    std::unordered_set<uint8_t> uint8_values;
+    auto byte_producer = [&writer, &uint8_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const uint8_t value = static_cast<uint8_t>(i);
             auto wrapper = writer.blocking_claim_buffer(sizeof(uint8_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint8_t));
-            {
-                std::lock_guard lock(written_mutex);
-                written_values.insert(static_cast<uint64_t>(value));
-            }
+            uint8_values.insert(value);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
     };
 
-    auto uint32_producer = [&writer, &written_values, &written_mutex, NUM_MESSAGES]() {
+    std::unordered_set<uint32_t> uint32_values;
+    auto uint32_producer = [&writer, &uint32_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const uint32_t value = static_cast<uint32_t>(i * 1000);
             auto wrapper = writer.blocking_claim_buffer(sizeof(uint32_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint32_t));
-            {
-                std::lock_guard lock(written_mutex);
-                written_values.insert(static_cast<uint64_t>(value));
-            }
+            uint32_values.insert(value);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
     };
 
-    auto uint64_producer = [&writer, &written_values, &written_mutex, NUM_MESSAGES]() {
+    std::unordered_set<uint64_t> uint64_values;
+    auto uint64_producer = [&writer, &uint64_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const uint64_t value = static_cast<uint64_t>(i * 100000);
             auto wrapper = writer.blocking_claim_buffer(sizeof(uint64_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t));
-            {
-                std::lock_guard lock(written_mutex);
-                written_values.insert(value);
-            }
+            uint64_values.insert(value);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
     };
 
-    auto consumer = [&reader, &read_values, &read_mutex, total_msgs = NUM_MESSAGES * 3]() {
+    // std::unordered_set<std::string> written_strings;
+    // auto str_producer = [&writer, &written_strings, NUM_MESSAGES]() {
+    //     for (int i = 1; i <= NUM_MESSAGES; ++i) {
+    //         const auto msg = std::format("Hello #{}!!!!", i);
+    //         auto wrapper = writer.blocking_claim_buffer(msg.size());
+    //         wrapper.write_to_buffer(msg.c_str(), msg.size());
+    //         written_strings.insert(msg);
+    //         std::this_thread::sleep_for(std::chrono::microseconds(100));
+    //     }
+    // };
+
+    std::unordered_set<std::string> read_strings;
+    std::unordered_set<uint64_t> read_values;
+    auto consumer = [&reader, &read_values, &read_strings, total_msgs = NUM_MESSAGES * 3]() {
         size_t count = 0;
         while (count < total_msgs) {
             auto wrapper = reader.poll_buffer();
@@ -803,28 +815,23 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
                     case sizeof(uint8_t): {
                         uint8_t value;
                         std::memcpy(&value, wrapper->get_buffer(), sizeof(uint8_t));
-                        {
-                            std::lock_guard lock(read_mutex);
-                            read_values.insert(static_cast<uint64_t>(value));
-                        }
+                        read_values.insert(static_cast<uint64_t>(value));
                         break;
                     }
                     case sizeof(uint32_t): {
                         uint32_t value;
                         std::memcpy(&value, wrapper->get_buffer(), sizeof(uint32_t));
-                        {
-                            std::lock_guard lock(read_mutex);
-                            read_values.insert(static_cast<uint64_t>(value));
-                        }
+                        read_values.insert(static_cast<uint64_t>(value));
                         break;
                     }
                     case sizeof(uint64_t): {
                         uint64_t value;
                         std::memcpy(&value, wrapper->get_buffer(), sizeof(uint64_t));
-                        {
-                            std::lock_guard lock(read_mutex);
-                            read_values.insert(value);
-                        }
+                        read_values.insert(value);
+                        break;
+                    }
+                    default :{
+                        // read_strings.insert(wrapper->get_as<std::string>());
                         break;
                     }
                 }
@@ -837,15 +844,24 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
     std::thread byte_thread(byte_producer);
     std::thread uint32_thread(uint32_producer);
     std::thread uint64_thread(uint64_producer);
+    // std::thread str_thread(str_producer);
     std::thread consumer_thread(consumer);
 
     byte_thread.join();
     uint32_thread.join();
     uint64_thread.join();
+    // str_thread.join();
     consumer_thread.join();
+
+    written_values.insert(uint8_values.begin(), uint8_values.end());
+    written_values.insert(uint32_values.begin(), uint32_values.end());
+    written_values.insert(uint64_values.begin(), uint64_values.end());
 
     EXPECT_EQ(written_values.size(), read_values.size());
     EXPECT_EQ(written_values, read_values);
+    // EXPECT_EQ(written_strings.size(), read_strings.size());
+    // EXPECT_EQ(written_strings, read_strings);
+
 
     // std::unordered_set<uint64_t> outer_join;
     // std::set_symmetric_difference(
