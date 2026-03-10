@@ -14,6 +14,8 @@ namespace message_transport {
         std::atomic<uint64_t> read_offset;  // offset from the beginning of the raw mapped memory region to the next available buffer region for reading
         std::atomic<uint64_t> queue_size_bytes; // total size of the queue in bytes, used for managing the shared memory and ensuring messages do not exceed the queue capacity
         std::atomic<uint64_t> message_count; // total number of messages written to the queue
+        std::atomic<uint64_t> writer_term;  // how many times we've traversed the ring buffer (helps identify lapping reader)
+        std::atomic<uint64_t> reader_term;
         std::atomic_bool has_writer;
         std::atomic_bool has_reader;
     };
