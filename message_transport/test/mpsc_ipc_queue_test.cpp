@@ -669,7 +669,9 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
             auto wrapper = writer1.blocking_claim_buffer(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
             producer1_values.insert(value);
+            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
+        spdlog::info("TwoProducersOneConsumer::thread1 - exiting");
     };
 
     std::unordered_set<int32_t> producer2_values;
@@ -679,7 +681,9 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
             auto wrapper = writer1.blocking_claim_buffer(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
             producer2_values.insert(value);
+            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
+        spdlog::info("TwoProducersOneConsumer::thread2 - exiting");
     };
 
     std::unordered_set<int32_t> producer3_values;
@@ -689,7 +693,9 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
             auto wrapper = writer1.blocking_claim_buffer(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
             producer3_values.insert(value);
+            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
+        spdlog::info("TwoProducersOneConsumer::thread3 - exiting");
     };
 
     std::unordered_set<int32_t> producer4_values;
@@ -699,19 +705,19 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
             auto wrapper = writer1.blocking_claim_buffer(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
             producer4_values.insert(value);
+            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
+        spdlog::info("TwoProducersOneConsumer::thread4 - exiting");
     };
 
     auto consumer = [&reader, &read_values, total_msgs = num_messages_per_producer * 4, msg_size]() {
-        size_t count = 0;
-        while (count < (total_msgs)) {
+        while (read_values.size() < total_msgs) {
             auto wrapper = reader.poll_buffer();
             if (wrapper.has_value()) {
                 int value;
                 std::memcpy(&value, wrapper->get_buffer(), msg_size);
                 read_values.insert(value);
-                // spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs - 2);
-                ++count;
+                spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs);
             }
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }

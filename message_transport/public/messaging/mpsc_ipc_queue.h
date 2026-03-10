@@ -91,37 +91,44 @@ namespace message_transport {
         // returns whether the queue should continue to poll or not.
         bool read_buffer();
 
-        // TODO: implement a callback_model concept and establish ownership semantics for the queue that allow us to
-        // have multiple producers and/or consumers, and to allow producers and consumers to dynamically join and leave
-        // the queue without disrupting the overall communication between other producers and consumers that are still active in the queue.
-        
-        // waits for the current slot to become available, either because its been read or because the region is skipped from a pervious iteration.
-        // Returns the number of application bytes that were stored in the slot.
-        inline void wait_for_slot_until(const uint64_t write_offset, const size_t total_size_with_header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
-
-            // basically just need the read_offset of the current reader to be outside the range of this write region
-            uint64_t read_begin = global_header->read_offset.load(std::memory_order_relaxed);
-            auto* message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_begin);
-            size_t read_end = read_begin + message_header->message_size;
-            const size_t write_end = write_offset + total_size_with_header;
-
-            spdlog::info("Waiting for slot at offset {} with size {} bytes to become available. Current read offset: {}", write_offset, total_size_with_header - sizeof(MessageHeader), read_begin);
-
-            while ((write_offset <= read_begin && read_begin < write_end) ||
-                   (write_offset < read_end && read_end <= write_end)) {
-
-                const auto& header = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_begin);
-                if (header.commit_flag.load(std::memory_order_relaxed) == CommitFlag::NOT_READY) {
-                    break;
-                }
-
-                std::this_thread::sleep_for(timeout);
-                read_begin = global_header->read_offset.load(std::memory_order_relaxed);
-                message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_begin);
-                read_end = read_begin + message_header->message_size;
-            }
-        }
-
         void insert_skip_message(const uint64_t skip_offset);
-};
+
+        inline uint64_t wait_for_next_write_offset(const size_t total_size_with_header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
+
+            /**
+             * This is a critical piece of code - basically writers must come here when the attempt to claim
+             * buffer space and the receive a valid location to write into.
+             * 
+             * We MUST ensure we not writing in memory that the reader is or _is going to_ be reading from.
+             * 
+             * The biggest challenge here is really just making sure we're not lapping the reader.
+             */
+            
+            auto write_offset = global_header->write_offset.load(std::memory_order_relaxed);
+            auto new_write_offset = write_offset + total_size_with_header;
+            auto write_term = global_header->writer_term.load(std::memory_order_relaxed);
+
+            while(!global_header->write_offset.compare_exchange_weak(write_offset, new_write_offset, std::memory_order_release, std::memory_order_relaxed)) {
+                // if this compare fails, we _might_ have lost the lock on the current writable region, or it might be a spurious failure.
+                // Try again.
+                new_write_offset = write_offset + total_size_with_header;
+                write_term = global_header->writer_term.load(std::memory_order_relaxed);
+            }
+
+            // now we have a write location claimed. May have to spin if the reader hasn't caught up yet.
+            auto read_term = global_header->reader_term.load(std::memory_order_relaxed);
+            auto read_begin = global_header->read_offset.load(std::memory_order_relaxed);
+
+            bool must_wait = (write_term != read_term) && (read_begin < new_write_offset);
+            while (must_wait) {
+                std::this_thread::sleep_for(timeout);
+
+                read_term = global_header->reader_term.load(std::memory_order_relaxed);
+                read_begin = global_header->read_offset.load(std::memory_order_relaxed);
+                must_wait = (write_term != read_term) && (read_begin < new_write_offset);
+            }
+
+            return write_offset;
+        }
+    };
 }
