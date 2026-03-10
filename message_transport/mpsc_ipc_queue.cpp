@@ -107,7 +107,7 @@ namespace message_transport {
                 new_message_header->sequence_number = global_header->message_count.fetch_add(1, std::memory_order_acq_rel);
                 new_message_header->message_size = size;
                 new_message_header->type = MessageType::NORMAL;
-                spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes)", current_write_offset, size, total_message_len);
+                // spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes)", current_write_offset, size, total_message_len);
                 return MpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
                 
             } else if ((current_write_offset + sizeof(MessageHeader)) <= queue_size_bytes) {
@@ -161,7 +161,7 @@ namespace message_transport {
                 }
 
                 // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
-                spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", current_read_offset, message_header->message_size, total_message_len);
+                // spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", current_read_offset, message_header->message_size, total_message_len);
                 return MpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
             }
             case CommitFlag::NOT_READY:

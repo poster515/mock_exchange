@@ -655,7 +655,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     const size_t msg_size = sizeof(int32_t);
     const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader) - sizeof(message_transport::MessageHeader);
     const size_t msgs_per_cycle = available_space / (msg_size + sizeof(message_transport::MessageHeader));
-    const int num_messages_per_producer = (4 * msgs_per_cycle / 2) - 1;
+    const int num_messages_per_producer = (100 * msgs_per_cycle / 2) - 1;
 
     std::cout << "Each producer will write " << num_messages_per_producer << " messages, total messages: " << num_messages_per_producer * 2 << "\n";
 
@@ -717,7 +717,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
                 int value;
                 std::memcpy(&value, wrapper->get_buffer(), msg_size);
                 read_values.insert(value);
-                spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs);
+                // spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs);
             }
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
@@ -763,7 +763,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
         }
     );
 
-    const int NUM_MESSAGES = 50;
+    const int NUM_MESSAGES = 5000;
     std::unordered_set<uint64_t> written_values;
 
     std::unordered_set<uint8_t> uint8_values;
@@ -842,7 +842,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
                     }
                 }
                 ++count;
-                spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
+                // spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
             }
             std::this_thread::sleep_for(std::chrono::microseconds(50));
         }
