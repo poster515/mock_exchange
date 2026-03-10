@@ -95,15 +95,15 @@ namespace message_transport {
             uint64_t current_write_offset = global_header->write_offset.load(std::memory_order_relaxed);
             uint64_t new_write_offset = current_write_offset + total_message_len;
 
-            // first we do a lazy check to see if we can write
-            spdlog::info("Waiting to insert message at offset {} with size {} bytes", current_write_offset, total_message_len);
-            wait_for_slot_until(total_message_len);
-
             while(!global_header->write_offset.compare_exchange_weak(current_write_offset, new_write_offset, std::memory_order_release, std::memory_order_relaxed)) {
                 // if this compare fails, we _might_ have lost the lock on the current writable region, or it might be a spurious failure.
                 // Try again.
                 new_write_offset = current_write_offset + total_message_len;
             }
+
+            // first we do a lazy check to see if we can write. Note that if we claim an invalid location this returns immediately
+            spdlog::info("Waiting to insert message at offset {} with size {} bytes", current_write_offset, total_message_len);
+            wait_for_slot_until(current_write_offset, total_message_len);
 
             // once we're here we know we've claimed a buffer location. see if its valid or not.
             if ((current_write_offset + size_required) <= queue_size_bytes) [[likely]] { 

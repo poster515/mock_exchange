@@ -97,9 +97,7 @@ namespace message_transport {
         
         // waits for the current slot to become available, either because its been read or because the region is skipped from a pervious iteration.
         // Returns the number of application bytes that were stored in the slot.
-        inline void wait_for_slot_until(const size_t total_size_with_header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
-
-            uint64_t write_offset = global_header->write_offset.load(std::memory_order_relaxed);
+        inline void wait_for_slot_until(const uint64_t write_offset, const size_t total_size_with_header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
 
             // basically just need the read_offset of the current reader to be outside the range of this write region
             uint64_t read_begin = global_header->read_offset.load(std::memory_order_relaxed);
@@ -121,8 +119,6 @@ namespace message_transport {
                 read_begin = global_header->read_offset.load(std::memory_order_relaxed);
                 message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_begin);
                 read_end = read_begin + message_header->message_size;
-
-                write_offset = global_header->write_offset.load(std::memory_order_relaxed);
             }
         }
 
