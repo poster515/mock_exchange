@@ -99,24 +99,24 @@ namespace message_transport {
         // Returns the number of application bytes that were stored in the slot.
         inline void wait_for_slot_until(const uint64_t write_offset, const size_t total_size_with_header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
 
+            const size_t write_end = write_offset + total_size_with_header;
+
             // basically just need the read_offset of the current reader to be outside the range of this write region
-            uint64_t read_begin = global_header->read_offset.load(std::memory_order_relaxed);
+            uint64_t read_begin = global_header->read_offset.load(std::memory_order_acquire);
             auto* message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_begin);
             size_t read_end = read_begin + message_header->message_size;
-            const size_t write_end = write_offset + total_size_with_header;
 
             spdlog::info("Waiting for slot at offset {} with size {} bytes to become available. Current read offset: {}", write_offset, total_size_with_header - sizeof(MessageHeader), read_begin);
 
             while ((write_offset <= read_begin && read_begin < write_end) ||
                    (write_offset < read_end && read_end <= write_end)) {
 
-                const auto& header = *reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_begin);
-                if (header.commit_flag.load(std::memory_order_relaxed) == CommitFlag::NOT_READY) {
+                if (message_header->commit_flag.load(std::memory_order_acquire) == CommitFlag::NOT_READY) {
                     break;
                 }
 
                 std::this_thread::sleep_for(timeout);
-                read_begin = global_header->read_offset.load(std::memory_order_relaxed);
+                read_begin = global_header->read_offset.load(std::memory_order_acquire);
                 message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + read_begin);
                 read_end = read_begin + message_header->message_size;
             }
