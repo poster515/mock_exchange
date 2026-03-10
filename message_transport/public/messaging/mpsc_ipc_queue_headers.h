@@ -32,6 +32,7 @@ namespace message_transport {
     struct MessageHeader {
         uint32_t message_size;            // payload size
         MessageType type;                 // NORMAL or PADDING
+        uint64_t sequence_number;           // monotonic sequence number of message (allow to naturally wrap (lol)), starts at 0
         std::atomic<CommitFlag> commit_flag; // 0 = not ready, 1 = ready for consumer
     };
 
