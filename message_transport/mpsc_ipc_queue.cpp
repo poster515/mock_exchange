@@ -102,7 +102,6 @@ namespace message_transport {
             }
 
             // first we do a lazy check to see if we can write. Note that if we claim an invalid location this returns immediately
-            spdlog::info("Waiting to insert message at offset {} with size {} bytes", current_write_offset, total_message_len);
             wait_for_slot_until(current_write_offset, total_message_len);
 
             // once we're here we know we've claimed a buffer location. see if its valid or not.
@@ -184,6 +183,8 @@ namespace message_transport {
 
         // now update header flags and bump read offset
         const auto total_message_len = header.message_size + sizeof(MessageHeader);
+        header.message_size = 0;
+        header.sequence_number = 0;
         header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
         global_header->read_offset.fetch_add(total_message_len, std::memory_order_release);
 
@@ -197,7 +198,7 @@ namespace message_transport {
             next_message_header->commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
             global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
         } else {
-            spdlog::info("Released message at offset {} with size {}, bytes (total size with header: {} bytes)", release_offset, header.message_size, total_message_len);
+            spdlog::info("Released message at offset {} with total size: {} bytes", release_offset, total_message_len);
         }
     }
 

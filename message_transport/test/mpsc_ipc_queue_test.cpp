@@ -711,7 +711,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
                 std::memcpy(&value, wrapper->get_buffer(), msg_size);
                 read_values.insert(value);
                 // spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs - 2);
-                count++;
+                ++count;
             }
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
@@ -793,20 +793,20 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
         }
     };
 
-    // std::unordered_set<std::string> written_strings;
-    // auto str_producer = [&writer, &written_strings, NUM_MESSAGES]() {
-    //     for (int i = 1; i <= NUM_MESSAGES; ++i) {
-    //         const auto msg = std::format("Hello #{}!!!!", i);
-    //         auto wrapper = writer.blocking_claim_buffer(msg.size());
-    //         wrapper.write_to_buffer(msg.c_str(), msg.size());
-    //         written_strings.insert(msg);
-    //         std::this_thread::sleep_for(std::chrono::microseconds(100));
-    //     }
-    // };
+    std::unordered_set<std::string> written_strings;
+    auto str_producer = [&writer, &written_strings, NUM_MESSAGES]() {
+        for (int i = 1; i <= NUM_MESSAGES; ++i) {
+            const auto msg = std::format("Hello #{}!!!!", i);
+            auto wrapper = writer.blocking_claim_buffer(msg.size());
+            wrapper.write_to_buffer(msg.c_str(), msg.size());
+            written_strings.insert(msg);
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    };
 
     std::unordered_set<std::string> read_strings;
     std::unordered_set<uint64_t> read_values;
-    auto consumer = [&reader, &read_values, &read_strings, total_msgs = NUM_MESSAGES * 3]() {
+    auto consumer = [&reader, &read_values, &read_strings, total_msgs = NUM_MESSAGES * 4]() {
         size_t count = 0;
         while (count < total_msgs) {
             auto wrapper = reader.poll_buffer();
@@ -831,11 +831,12 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
                         break;
                     }
                     default :{
-                        // read_strings.insert(wrapper->get_as<std::string>());
+                        read_strings.insert(std::string(wrapper->get_as_view<std::string_view>()));
                         break;
                     }
                 }
-                count++;
+                ++count;
+                spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
             }
             std::this_thread::sleep_for(std::chrono::microseconds(50));
         }
@@ -844,13 +845,13 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
     std::thread byte_thread(byte_producer);
     std::thread uint32_thread(uint32_producer);
     std::thread uint64_thread(uint64_producer);
-    // std::thread str_thread(str_producer);
+    std::thread str_thread(str_producer);
     std::thread consumer_thread(consumer);
 
     byte_thread.join();
     uint32_thread.join();
     uint64_thread.join();
-    // str_thread.join();
+    str_thread.join();
     consumer_thread.join();
 
     written_values.insert(uint8_values.begin(), uint8_values.end());
@@ -859,8 +860,10 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
 
     EXPECT_EQ(written_values.size(), read_values.size());
     EXPECT_EQ(written_values, read_values);
-    // EXPECT_EQ(written_strings.size(), read_strings.size());
-    // EXPECT_EQ(written_strings, read_strings);
+    EXPECT_EQ(written_strings.size(), read_strings.size());
+    EXPECT_EQ(written_strings, read_strings);
+
+
 
 
     // std::unordered_set<uint64_t> outer_join;
