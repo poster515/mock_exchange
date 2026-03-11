@@ -655,7 +655,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     const size_t msg_size = sizeof(int32_t);
     const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader) - sizeof(message_transport::MessageHeader);
     const size_t msgs_per_cycle = available_space / (msg_size + sizeof(message_transport::MessageHeader));
-    const int num_messages_per_producer = (100 * msgs_per_cycle / 2) - 1;
+    const int num_messages_per_producer = (10000 * msgs_per_cycle / 2) - 1;
 
     std::cout << "Each producer will write " << num_messages_per_producer << " messages, total messages: " << num_messages_per_producer * 2 << "\n";
 
@@ -780,7 +780,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
     std::unordered_set<uint32_t> uint32_values;
     auto uint32_producer = [&writer, &uint32_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
-            const uint32_t value = static_cast<uint32_t>(i * 1000);
+            const uint32_t value = static_cast<uint32_t>(i + NUM_MESSAGES);
             auto wrapper = writer.blocking_claim_buffer(sizeof(uint32_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint32_t));
             uint32_values.insert(value);
@@ -791,7 +791,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
     std::unordered_set<uint64_t> uint64_values;
     auto uint64_producer = [&writer, &uint64_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
-            const uint64_t value = static_cast<uint64_t>(i * 100000);
+            const uint64_t value = static_cast<uint64_t>(i + (NUM_MESSAGES * 2));
             auto wrapper = writer.blocking_claim_buffer(sizeof(uint64_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t));
             uint64_values.insert(value);
@@ -868,9 +868,6 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
     EXPECT_EQ(written_values, read_values);
     EXPECT_EQ(written_strings.size(), read_strings.size());
     EXPECT_EQ(written_strings, read_strings);
-
-
-
 
     // std::unordered_set<uint64_t> outer_join;
     // std::set_symmetric_difference(

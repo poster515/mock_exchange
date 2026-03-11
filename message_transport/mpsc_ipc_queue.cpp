@@ -12,7 +12,8 @@
 
 namespace message_transport {
     MpscIpcQueue::MpscIpcQueue(MpscQueueParameters&& params)
-            : queue_size_bytes(params.queue_size) 
+            : queue_size_bytes(params.queue_size + sizeof(GlobalHeader)) 
+            , available_queue_size_bytes(params.queue_size)
             , dispatcher(params.callback)
             , is_writer(params.is_writer) {
 
@@ -44,11 +45,11 @@ namespace message_transport {
             global_header->message_count.store(0, std::memory_order_relaxed);
             global_header->has_writer.store(true, std::memory_order_release);
 
-            global_header->write_offset.store(sizeof(GlobalHeader), std::memory_order_release);
-            global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
+            global_header->write_offset.store(0, std::memory_order_release);
+            global_header->read_offset.store(0, std::memory_order_release);
 
             // yeet the whole queue to a known value (0 = MESSAGE_UNKNOWN which is ok for writing)
-            memset(reinterpret_cast<uint8_t*>(global_header) + sizeof(GlobalHeader), 0, queue_size_bytes - sizeof(GlobalHeader));
+            memset(reinterpret_cast<uint8_t*>(global_header) + sizeof(GlobalHeader), 0, available_queue_size_bytes);
         } else {
 
             // if we're the reader, we need to wait until the writer has initialized the global header before we can safely read from it.
@@ -86,43 +87,32 @@ namespace message_transport {
             throw std::runtime_error("Cannot claim buffer for message with size 0 bytes");
         }
 
+        // only allow committing if we can buffer an extra message at the end of the queue
         const auto total_message_len = size + sizeof(MessageHeader);
 
-        // only allow committing if we can buffer an extra message at the end of the queue
-        const auto size_required = total_message_len + sizeof(MessageHeader);
+        // first we claim the next write location, no matter what. Also waits for any slow reader
+        const auto abs_write_offset = wait_for_next_write_offset(total_message_len);
+        const auto rel_write_offset = abs_write_offset % available_queue_size_bytes;
+        const auto bytes_remaining_at_end = available_queue_size_bytes - rel_write_offset;
 
-        while (true) {
-
-            // first we do a lazy check to see if we can write. Note that if we claim an invalid location this returns immediately
-            const auto current_write_offset = wait_for_next_write_offset(total_message_len);
-
-            // once we're here we know we've claimed a buffer location. see if its valid or not.
-            if ((current_write_offset + size_required) <= queue_size_bytes) [[likely]] { 
-                // we successfully claimed a region for writing, and the new write offset is within the bounds of the queue,
-                // so we can break out of the loop and write our message.
-                void* new_buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
-                auto* new_message_header = static_cast<MessageHeader*>(new_buffer_ptr);
-
-                // if we're here we are GUARANTEED to have carte blanche write perms. Wrapper will set commit bit 
-                new_message_header->sequence_number = global_header->message_count.fetch_add(1, std::memory_order_acq_rel);
-                new_message_header->message_size = size;
-                new_message_header->type = MessageType::NORMAL;
-                // spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes)", current_write_offset, size, total_message_len);
-                return MpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
-                
-            } else if ((current_write_offset + sizeof(MessageHeader)) <= queue_size_bytes) {
-
-                // we claimed successfully, but must write a skip message and try again.
-                void* buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + current_write_offset);
-                auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
-                insert_skip_message(current_write_offset);
-
-                global_header->writer_term.fetch_add(1, std::memory_order_acq_rel);
-                global_header->write_offset.store(sizeof(GlobalHeader), std::memory_order_release);
-                // need to try again here too
-            }
-            // any other conditions require that we try again.
+        // we may have claimed a spot at the end of the buffer that needs a skip message instead. Check, insert, and try again.
+        if ((total_message_len + sizeof(MessageHeader)) > bytes_remaining_at_end) {
+            spdlog::info("Not enough room at offset {} for total size {} bytes (bytes at end {}, total avail {}), inserting skip", rel_write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
+            insert_skip_message(rel_write_offset);
+            return blocking_claim_buffer(size);
         }
+
+        // we successfully claimed a region for writing, and the new write offset is within the bounds of the queue.
+        void* new_buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + rel_write_offset + sizeof(GlobalHeader));
+        auto* new_message_header = static_cast<MessageHeader*>(new_buffer_ptr);
+
+        // if we're here we are GUARANTEED to have carte blanche write perms. Wrapper will set commit bit 
+        new_message_header->sequence_number = global_header->message_count.fetch_add(1, std::memory_order_acq_rel);
+        new_message_header->message_size = size;
+        new_message_header->type = MessageType::NORMAL;
+
+        // spdlog::info("Claimed buffer at offset {} with size {}, bytes (total size with header: {} bytes)", current_write_offset, size, total_message_len);
+        return MpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
     }
 
     std::optional<MpscIpcQueueRaiiWriterWrapper> MpscIpcQueue::nonblocking_claim_buffer(size_t size) {
@@ -134,9 +124,10 @@ namespace message_transport {
             throw std::runtime_error("Producer cannot poll for messages in the queue");
         }
 
-        size_t current_read_offset = global_header->read_offset.load(std::memory_order_acquire);
+        const auto abs_read_offset = global_header->read_offset.load(std::memory_order_acquire);
+        const auto rel_read_offset = abs_read_offset % available_queue_size_bytes;
 
-        void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + current_read_offset);
+        void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + rel_read_offset + sizeof(GlobalHeader));
         auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
         auto block_state = message_header->commit_flag.load(std::memory_order_acquire);
 
@@ -147,7 +138,7 @@ namespace message_transport {
 
                 if (message_header->type == MessageType::PADDING) {
                     // if this is a padding message, we need to skip it and move the read offset to the next message after the padding message.
-                    spdlog::info("Polled skip message at offset {} with size {}, bytes (total size with header: {} bytes), skipping to beginning of queue", current_read_offset, message_header->message_size, total_message_len);
+                    spdlog::info("Polled skip message at offset {} with size {}, bytes (total size with header: {} bytes), skipping to beginning of queue", rel_read_offset, message_header->message_size, total_message_len);
 
                     // clear a bunch of flags
                     message_header->message_size = 0;
@@ -155,8 +146,7 @@ namespace message_transport {
                     message_header->commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
 
                     // bump the read offset and term count
-                    global_header->read_offset.store(sizeof(GlobalHeader), std::memory_order_release);
-                    global_header->reader_term.fetch_add(1, std::memory_order_acq_rel);
+                    global_header->read_offset.fetch_add(total_message_len, std::memory_order_acq_rel);
                     return poll_buffer();
                 }
 
@@ -196,7 +186,7 @@ namespace message_transport {
     void MpscIpcQueue::insert_skip_message(const uint64_t skip_offset) {
 
         // be nice and set these to 0
-        auto* message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + skip_offset);
+        auto* message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + skip_offset + sizeof(GlobalHeader));
         auto* message_payload = static_cast<void*>(message_header + sizeof(MessageHeader));
         const auto padding_size = queue_size_bytes - skip_offset - sizeof(MessageHeader);
         std::memset(message_payload, 0, padding_size);
@@ -206,6 +196,6 @@ namespace message_transport {
         message_header->sequence_number = 0;
         message_header->commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
 
-        spdlog::info("Inserted skip message at offset {} with size {} bytes to wrap around the queue", skip_offset, padding_size);
+        spdlog::info("Inserted skip message at offset {} with total size {} bytes to wrap around the queue", skip_offset, padding_size + sizeof(MessageHeader));
     }
 }
