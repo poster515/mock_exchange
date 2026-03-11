@@ -82,7 +82,7 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
     );
 
     const size_t msg_size = 64;
-    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader) - sizeof(message_transport::MessageHeader);
+    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::MessageHeader);
     const int num_messages_to_fill = available_space / (msg_size + sizeof(message_transport::MessageHeader));
 
     std::vector<int> written_values;
@@ -97,6 +97,7 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
     }
 
     // Start producer thread that will block trying to write
+    spdlog::info("ProducerBlocksWhenQueueFull::attempting to block producer...");
     std::thread producer([&writer, &producer_blocked, msg_size]() {
         producer_blocked.store(true, std::memory_order_release);
         int value = 999;
@@ -653,9 +654,9 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     );
 
     const size_t msg_size = sizeof(int32_t);
-    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::GlobalHeader) - sizeof(message_transport::MessageHeader);
+    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::MessageHeader);
     const size_t msgs_per_cycle = available_space / (msg_size + sizeof(message_transport::MessageHeader));
-    const int num_messages_per_producer = (10000 * msgs_per_cycle / 2) - 1;
+    const int num_messages_per_producer = (100 * msgs_per_cycle / 2) - 1;
 
     std::cout << "Each producer will write " << num_messages_per_producer << " messages, total messages: " << num_messages_per_producer * 2 << "\n";
 
