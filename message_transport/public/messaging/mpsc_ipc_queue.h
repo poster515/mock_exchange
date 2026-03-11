@@ -128,12 +128,12 @@ namespace message_transport {
 
             // now we have a write location claimed. May have to spin if the reader hasn't caught up yet.
             auto read_begin = global_header->read_offset.load(std::memory_order_relaxed);
-            bool must_wait = (write_offset - read_begin) >= available_queue_size_bytes;
-            // spdlog::info("Claimed abs offset write_offset {}, abs read_offset at {}, must_wait: {}", write_offset, read_begin, must_wait);
+            bool must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
+            // spdlog::info("Claimed abs offset write_offset {} with total sz {}, abs read_offset at {}, must_wait: {}", write_offset, next_write_offset - write_offset, read_begin, must_wait);
             while (must_wait) {
                 std::this_thread::sleep_for(timeout);
                 read_begin = global_header->read_offset.load(std::memory_order_relaxed);
-                must_wait = (write_offset - read_begin) >= available_queue_size_bytes;
+                must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
             }
 
             return write_offset;

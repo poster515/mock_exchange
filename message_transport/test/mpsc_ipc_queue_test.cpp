@@ -658,7 +658,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     const size_t msgs_per_cycle = available_space / (msg_size + sizeof(message_transport::MessageHeader));
     const int num_messages_per_producer = (100 * msgs_per_cycle / 2) - 1;
 
-    std::cout << "Each producer will write " << num_messages_per_producer << " messages, total messages: " << num_messages_per_producer * 2 << "\n";
+    std::cout << "Each producer will write " << num_messages_per_producer << " messages, total messages: " << num_messages_per_producer * 4 << "\n";
 
     std::unordered_set<int32_t> written_values;
     std::unordered_set<int32_t> read_values;
@@ -764,7 +764,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
         }
     );
 
-    const int NUM_MESSAGES = 5000;
+    const int NUM_MESSAGES = 50000;
     std::unordered_set<uint64_t> written_values;
 
     std::unordered_set<uint8_t> uint8_values;
