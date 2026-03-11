@@ -10,12 +10,10 @@ namespace message_transport {
     // TODO: do we event need the message count?
     // TODO: can we better cache align this? Or does it not really matter since we're accessing individual fields atomically.
     struct GlobalHeader {
-        std::atomic<uint64_t> write_offset; // offset from the beginning of the raw mapped memory region to the next available buffer region for writing
-        std::atomic<uint64_t> read_offset;  // offset from the beginning of the raw mapped memory region to the next available buffer region for reading
+        std::atomic<uint64_t> write_offset; // unscaled offset from the end of the global header of the raw mapped memory region, to the next available buffer region for writing
+        std::atomic<uint64_t> read_offset;  // unscaled offset from the end of the global header of the raw mapped memory region, to the next available buffer region for reading
         std::atomic<uint64_t> queue_size_bytes; // total size of the queue in bytes, used for managing the shared memory and ensuring messages do not exceed the queue capacity
         std::atomic<uint64_t> message_count; // total number of messages written to the queue
-        std::atomic<uint64_t> writer_term;  // how many times we've traversed the ring buffer (helps identify lapping reader)
-        std::atomic<uint64_t> reader_term;
         std::atomic_bool has_writer;
         std::atomic_bool has_reader;
     };

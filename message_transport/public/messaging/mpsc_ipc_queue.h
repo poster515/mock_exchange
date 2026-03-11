@@ -43,6 +43,7 @@ namespace message_transport {
         // Could make this a class template/concept but for now we'll leave it as a suboptimal function.
         using CallbackModel = std::function<bool(MpscIpcQueueRaiiReaderWrapper)>;
 
+        // TODO: if we can assert queue_size_bytes as power of 2 we can use masking instead of mod-ing for offset calcs
         struct MpscQueueParameters {
             std::string_view file_name;
             size_t queue_size;
@@ -76,6 +77,7 @@ namespace message_transport {
         // the total size of the queue in bytes, which will be used to manage the shared 
         // memory and ensure that messages do not exceed the queue capacity.
         const size_t queue_size_bytes;
+        const size_t available_queue_size_bytes;
 
         // grab and/or set the state of the shared memory region
         message_transport::GlobalHeader* global_header;
@@ -105,27 +107,33 @@ namespace message_transport {
              */
             
             auto write_offset = global_header->write_offset.load(std::memory_order_relaxed);
-            auto new_write_offset = write_offset + total_size_with_header;
-            auto write_term = global_header->writer_term.load(std::memory_order_relaxed);
 
-            while(!global_header->write_offset.compare_exchange_weak(write_offset, new_write_offset, std::memory_order_release, std::memory_order_relaxed)) {
-                // if this compare fails, we _might_ have lost the lock on the current writable region, or it might be a spurious failure.
-                // Try again.
-                new_write_offset = write_offset + total_size_with_header;
-                write_term = global_header->writer_term.load(std::memory_order_relaxed);
-            }
+            size_t bytes_remaining_at_end {0};
+            uint64_t rel_write_offset {0};
+            uint64_t next_write_offset {0};
+
+            do {
+                rel_write_offset = write_offset % available_queue_size_bytes;
+                bytes_remaining_at_end = available_queue_size_bytes - rel_write_offset;
+                
+                if ((total_size_with_header + sizeof(MessageHeader)) <= bytes_remaining_at_end) {
+                    // if we can fit our message plus another MessageHeader, cool! Try to claim.
+                    next_write_offset = write_offset + total_size_with_header;
+                } else {
+                    // otherwise, try to bump the next_write_offset to the beginning of the queue.
+                    // We'll handle the skip message insertion later.
+                    next_write_offset = write_offset + bytes_remaining_at_end;
+                }
+            } while(!global_header->write_offset.compare_exchange_weak(write_offset, next_write_offset, std::memory_order_release, std::memory_order_relaxed));
 
             // now we have a write location claimed. May have to spin if the reader hasn't caught up yet.
-            auto read_term = global_header->reader_term.load(std::memory_order_relaxed);
             auto read_begin = global_header->read_offset.load(std::memory_order_relaxed);
-
-            bool must_wait = (write_term != read_term) && (read_begin < new_write_offset);
+            bool must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
+            // spdlog::info("Claimed abs offset write_offset {} with total sz {}, abs read_offset at {}, must_wait: {}", write_offset, next_write_offset - write_offset, read_begin, must_wait);
             while (must_wait) {
                 std::this_thread::sleep_for(timeout);
-
-                read_term = global_header->reader_term.load(std::memory_order_relaxed);
                 read_begin = global_header->read_offset.load(std::memory_order_relaxed);
-                must_wait = (write_term != read_term) && (read_begin < new_write_offset);
+                must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
             }
 
             return write_offset;
