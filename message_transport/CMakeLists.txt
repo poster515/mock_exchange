@@ -21,6 +21,7 @@ target_link_libraries(messaging PUBLIC
 
 # Unit Tests
 add_subdirectory(test)
+add_subdirectory(benchmark)
 
 # Producer Binary
 add_executable(producer test_producer.cpp)

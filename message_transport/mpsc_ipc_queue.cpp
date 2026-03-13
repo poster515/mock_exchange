@@ -17,7 +17,7 @@ namespace message_transport {
             , dispatcher(params.callback)
             , is_writer(params.is_writer) {
 
-        if (queue_size_bytes > MAX_QUEUE_SIZE_BYTES) {
+        if (params.queue_size > MAX_QUEUE_SIZE_BYTES) {
             throw std::runtime_error("Queue size exceeds maximum allowed size of " + std::to_string(MAX_QUEUE_SIZE_BYTES) + " bytes");
         }
 
@@ -97,7 +97,7 @@ namespace message_transport {
 
         // we may have claimed a spot at the end of the buffer that needs a skip message instead. Check, insert, and try again.
         if ((total_message_len + sizeof(MessageHeader)) > bytes_remaining_at_end) {
-            spdlog::info("Not enough room at offset {} for total size {} bytes (bytes at end {}, total avail {}), inserting skip", rel_write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
+            // spdlog::info("Not enough room at offset {} for total size {} bytes (bytes at end {}, total avail {}), inserting skip", rel_write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
             insert_skip_message(rel_write_offset);
             return blocking_claim_buffer(size);
         }
@@ -139,7 +139,7 @@ namespace message_transport {
 
                 if (message_header->type == MessageType::PADDING) {
                     // if this is a padding message, we need to skip it and move the read offset to the next message after the padding message.
-                    spdlog::info("Polled skip message at offset {} with size {}, bytes (total size with header: {} bytes), skipping to beginning of queue", rel_read_offset, message_header->message_size, total_message_len);
+                    // spdlog::info("Polled skip message at offset {} with size {}, bytes (total size with header: {} bytes), skipping to beginning of queue", rel_read_offset, message_header->message_size, total_message_len);
                     release_buffer(*message_header);
                     return poll_buffer();
                 }

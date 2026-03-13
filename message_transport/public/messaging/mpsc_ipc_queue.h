@@ -47,8 +47,8 @@ namespace message_transport {
         struct MpscQueueParameters {
             std::string_view file_name;
             size_t queue_size;
-            bool is_writer;
-            std::optional<CallbackModel> callback;
+            bool is_writer {true};
+            std::optional<CallbackModel> callback {std::nullopt};
         };
         
         MpscIpcQueue(MpscQueueParameters&& params);

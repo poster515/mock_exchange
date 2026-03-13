@@ -1,23 +1,18 @@
 #pragma once
 
 #include <cstdint>
+
+
 #include "generated/exchange_order/MessageHeader.h"
 #include "generated/exchange_order/NewOrderSingle.h"
 
 namespace exchange::order {
 
-struct DecodedNewOrder
-{
-    uint64_t order_id;
-    std::array<char, 8> symbol;
-    uint32_t qty;
-    int64_t price;
-    uint8_t side;
-};
-
-class Decoder
+class FixSbeDecoder
 {
 public:
+
+
 
     static bool decode_new_order(
         const char* buffer,
@@ -50,5 +45,7 @@ public:
         return true;
     }
 };
+
+
 
 }

@@ -72,6 +72,12 @@ namespace message_transport {
             return *reinterpret_cast<const T*>(message_payload);
         }
 
+        size_t copy_contents_into(void* dest, size_t max_capacity) const {
+            assert(max_capacity >= (wrapper.size_bytes() - sizeof(MessageHeader)));
+            memcpy(dest, wrapper.data() + sizeof(MessageHeader), wrapper.size_bytes() - sizeof(MessageHeader));
+            return wrapper.size_bytes() - sizeof(MessageHeader);
+        }
+
         // Use this for non-owning views e.g., string_view, span, etc.
         template <typename T>
             requires std::is_trivially_copyable_v<T>

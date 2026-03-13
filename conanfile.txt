@@ -1,7 +1,7 @@
 [requires]
 magic_enum/0.9.7
 spdlog/1.17.0
-quickfix/1.15.1
+benchmark/1.9.4
 
 [test_requires]
 gtest/1.17.0
