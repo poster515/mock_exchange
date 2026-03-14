@@ -27,6 +27,7 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
     const size_t producers   = state.range(0);
     const size_t message_size = state.range(1);
     const size_t queue_size   = 1 << 20; // 1 MB
+    const std::chrono::nanoseconds timeout = std::chrono::nanoseconds(1);
 
     message_transport::MpscIpcQueue write_queue(message_transport::MpscIpcQueue::MpscQueueParameters {
 		.file_name = "/dev/shm/queue_benchmark",
@@ -58,7 +59,7 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
 
             while (!stop.load(std::memory_order_relaxed))
             {
-                auto writer = write_queue.blocking_claim_buffer(message_size);
+                auto writer = write_queue.blocking_claim_buffer(message_size, timeout);
 				benchmark::DoNotOptimize(writer.write_to_buffer(reinterpret_cast<const char*>(message.data()), message_size));
                 benchmark::DoNotOptimize(produced.value.fetch_add(1, std::memory_order_relaxed));
 				std::this_thread::sleep_for(std::chrono::nanoseconds(10));
@@ -103,9 +104,9 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
 BENCHMARK(BM_MpscQueueThroughput)
     ->Args({1, 64})
     ->Args({2, 64})
-    // ->Args({4, 64})
-    // ->Args({8, 64})
-    // ->Args({4, 256})
+    ->Args({4, 64})
+    ->Args({8, 64})
+    ->Args({4, 256})
     // ->Args({4, 1024})
     ->MinTime(5)
     ->Iterations(1 << 10);

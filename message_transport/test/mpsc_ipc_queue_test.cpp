@@ -97,7 +97,6 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
     }
 
     // Start producer thread that will block trying to write
-    spdlog::info("ProducerBlocksWhenQueueFull::attempting to block producer...");
     std::thread producer([&writer, &producer_blocked, msg_size]() {
         producer_blocked.store(true, std::memory_order_release);
         int value = 999;
@@ -107,7 +106,7 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
     });
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    ASSERT_TRUE(producer_blocked.load(std::memory_order_acquire));
+    EXPECT_TRUE(producer_blocked.load(std::memory_order_acquire));
 
     // Read messages one by one to free up space
     for (int i : std::ranges::iota_view{0, num_messages_to_fill}) {
@@ -153,7 +152,7 @@ TEST_F(MpscIpcQueueTest, BasicQueueWrapping) {
     );
 
     std::string_view message = "this_is_a_long_message";
-    const auto iters_to_fill_buffer = (SMALL_QUEUE_SIZE  - sizeof(message_transport::GlobalHeader) - sizeof(message_transport::MessageHeader)) / (message.size() + sizeof(message_transport::MessageHeader));
+    const auto iters_to_fill_buffer = (SMALL_QUEUE_SIZE - sizeof(message_transport::MessageHeader)) / (message.size() + sizeof(message_transport::MessageHeader));
 
     for (auto i = 0; i < iters_to_fill_buffer; ++i) {
         auto wrapper = writer.blocking_claim_buffer(message.size());
@@ -359,10 +358,9 @@ TEST_F(MpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
     std::vector<uint64_t> written_values;
     std::vector<uint64_t> read_values;
 
-    const auto iters_to_fill_buffer = (SMALL_QUEUE_SIZE  - sizeof(message_transport::GlobalHeader) - sizeof(message_transport::MessageHeader)) / (sizeof(uint64_t) + sizeof(message_transport::MessageHeader));
+    const auto iters_to_fill_buffer = (SMALL_QUEUE_SIZE  - sizeof(message_transport::MessageHeader)) / (sizeof(uint64_t) + sizeof(message_transport::MessageHeader));
     const int NUM_MESSAGES = iters_to_fill_buffer * 1.5; // write enough messages to fill the buffer and cause wrap around
-    std::cout << "Buffer can hold " << iters_to_fill_buffer << " messages, writing " << NUM_MESSAGES << " messages to force wrap around\n";
-    auto producer = [&writer, &written_values]() {
+    auto producer = [&writer, &written_values, &NUM_MESSAGES]() {
         for (int i : std::ranges::iota_view{0, NUM_MESSAGES}) {
             auto wrapper = writer.blocking_claim_buffer(sizeof(uint64_t));
             const uint64_t value = static_cast<uint64_t>(i);
@@ -372,7 +370,7 @@ TEST_F(MpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
         }
     };
 
-    auto consumer = [&reader, &read_values]() {
+    auto consumer = [&reader, &read_values, &NUM_MESSAGES]() {
         while (read_values.size() < NUM_MESSAGES) {
             auto wrapper = reader.poll_buffer();
             if (wrapper.has_value()) {
@@ -658,8 +656,6 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     const size_t msgs_per_cycle = available_space / (msg_size + sizeof(message_transport::MessageHeader));
     const int num_messages_per_producer = (100 * msgs_per_cycle / 2) - 1;
 
-    std::cout << "Each producer will write " << num_messages_per_producer << " messages, total messages: " << num_messages_per_producer * 4 << "\n";
-
     std::unordered_set<int32_t> written_values;
     std::unordered_set<int32_t> read_values;
 
@@ -672,7 +668,6 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
             producer1_values.insert(value);
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
-        spdlog::info("TwoProducersOneConsumer::thread1 - exiting");
     };
 
     std::unordered_set<int32_t> producer2_values;
@@ -684,7 +679,6 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
             producer2_values.insert(value);
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
-        spdlog::info("TwoProducersOneConsumer::thread2 - exiting");
     };
 
     std::unordered_set<int32_t> producer3_values;
@@ -696,7 +690,6 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
             producer3_values.insert(value);
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
-        spdlog::info("TwoProducersOneConsumer::thread3 - exiting");
     };
 
     std::unordered_set<int32_t> producer4_values;
@@ -708,7 +701,6 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
             producer4_values.insert(value);
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
-        spdlog::info("TwoProducersOneConsumer::thread4 - exiting");
     };
 
     auto consumer = [&reader, &read_values, total_msgs = num_messages_per_producer * 4, msg_size]() {

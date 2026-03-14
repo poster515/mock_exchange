@@ -40,6 +40,8 @@ namespace message_transport {
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
         static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
 
+        static bool is_power_of_two(size_t n) { return n != 0 && (n & (n - 1)) == 0; }
+
         // Could make this a class template/concept but for now we'll leave it as a suboptimal function.
         using CallbackModel = std::function<bool(MpscIpcQueueRaiiReaderWrapper)>;
 
@@ -56,9 +58,9 @@ namespace message_transport {
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 
         // returned wrapper, the buffer will be committed to the queue.
-        MpscIpcQueueRaiiWriterWrapper blocking_claim_buffer(size_t size);
+        MpscIpcQueueRaiiWriterWrapper blocking_claim_buffer(size_t size, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT);
 
-        std::optional<MpscIpcQueueRaiiWriterWrapper> nonblocking_claim_buffer(size_t size);
+        std::optional<MpscIpcQueueRaiiWriterWrapper> nonblocking_claim_buffer(size_t size, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT);
 
         // public API that exposes a single, non-blocking call for the consumer to poll for new messages in the queue.
         // This method will return immediately if there are no new messages available, and will return a wrapper around 
@@ -107,7 +109,7 @@ namespace message_transport {
              * The biggest challenge here is really just making sure we're not lapping the reader.
              */
             
-            auto write_offset = global_header->write_offset.load(std::memory_order_relaxed);
+            auto write_offset = global_header->write_fields.write_offset.load(std::memory_order_relaxed);
 
             size_t bytes_remaining_at_end {0};
             uint64_t rel_write_offset {0};
@@ -125,15 +127,15 @@ namespace message_transport {
                     // We'll handle the skip message insertion later.
                     next_write_offset = write_offset + bytes_remaining_at_end;
                 }
-            } while(!global_header->write_offset.compare_exchange_weak(write_offset, next_write_offset, std::memory_order_release, std::memory_order_relaxed));
+            } while(!global_header->write_fields.write_offset.compare_exchange_weak(write_offset, next_write_offset, std::memory_order_release, std::memory_order_relaxed));
 
             // now we have a write location claimed. May have to spin if the reader hasn't caught up yet.
-            auto read_begin = global_header->read_offset.load(std::memory_order_relaxed);
+            auto read_begin = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
             bool must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
-            // spdlog::info("Claimed abs offset write_offset {} with total sz {}, abs read_offset at {}, must_wait: {}", write_offset, next_write_offset - write_offset, read_begin, must_wait);
+
             while (must_wait) {
                 std::this_thread::sleep_for(timeout);
-                read_begin = global_header->read_offset.load(std::memory_order_relaxed);
+                read_begin = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
                 must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
             }
 

@@ -5,18 +5,35 @@ namespace message_transport {
 
 #pragma pack(push, 1)
 
-    // global header structure that will be placed at the beginning of the shared memory region
-    // to manage the state of the queue.
-    // TODO: do we event need the message count?
-    // TODO: can we better cache align this? Or does it not really matter since we're accessing individual fields atomically.
-    struct GlobalHeader {
+
+    struct WriteFields {
         std::atomic<uint64_t> write_offset; // unscaled offset from the end of the global header of the raw mapped memory region, to the next available buffer region for writing
-        std::atomic<uint64_t> read_offset;  // unscaled offset from the end of the global header of the raw mapped memory region, to the next available buffer region for reading
-        std::atomic<uint64_t> queue_size_bytes; // total size of the queue in bytes, used for managing the shared memory and ensuring messages do not exceed the queue capacity
         std::atomic<uint64_t> message_count; // total number of messages written to the queue
+        std::atomic<uint64_t> queue_size_bytes; // total size of the queue in bytes, used for managing the shared memory and ensuring messages do not exceed the queue capacity
+    };
+
+    struct ReadFields {
+        std::atomic<uint64_t> read_offset;  // unscaled offset from the end of the global header of the raw mapped memory region, to the next available buffer region for reading
         std::atomic_bool has_writer;
         std::atomic_bool has_reader;
     };
+
+    template <typename T, size_t N> requires (N >= sizeof(T))
+    using Padding = std::array<uint8_t, N - sizeof(T)>;
+
+    using WritePadding = Padding<WriteFields, 64>;
+    using ReadPadding = Padding<ReadFields, 64>;
+
+    // global header structure that will be placed at the beginning of the shared memory region
+    struct GlobalHeader {
+        WriteFields write_fields;
+        WritePadding write_padding;
+
+        ReadFields read_fields;
+        ReadPadding read_padding;
+    };
+
+    static_assert(sizeof(GlobalHeader) == 128, "sizeof(GlobalHeader) is not 128");
 
     enum class MessageType : uint32_t {
         NORMAL = 0x00,
