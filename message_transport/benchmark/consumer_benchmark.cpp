@@ -107,4 +107,5 @@ BENCHMARK(BM_MpscQueueThroughput)
     // ->Args({8, 64})
     // ->Args({4, 256})
     // ->Args({4, 1024})
-    ->MinTime(5);
+    ->MinTime(5)
+    ->Iterations(1 << 10);

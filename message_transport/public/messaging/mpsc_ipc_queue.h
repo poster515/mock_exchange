@@ -73,6 +73,7 @@ namespace message_transport {
         // shared memory and ensuring proper synchronization between producer and consumer.
         // not super happy with this, but it'll help do some stupid sanity checks on startup.
         bool is_writer;
+        const std::string file_name;
 
         // the total size of the queue in bytes, which will be used to manage the shared 
         // memory and ensure that messages do not exceed the queue capacity.

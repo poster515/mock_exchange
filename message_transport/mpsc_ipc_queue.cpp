@@ -12,7 +12,8 @@
 
 namespace message_transport {
     MpscIpcQueue::MpscIpcQueue(MpscQueueParameters&& params)
-            : queue_size_bytes(params.queue_size + sizeof(GlobalHeader)) 
+            : file_name(params.file_name)
+            , queue_size_bytes(params.queue_size + sizeof(GlobalHeader)) 
             , available_queue_size_bytes(params.queue_size)
             , dispatcher(params.callback)
             , is_writer(params.is_writer) {
@@ -24,7 +25,7 @@ namespace message_transport {
         fd = shm_open(params.file_name.data(), O_CREAT | O_RDWR, 0666);
 
         if (fd == -1) {
-            throw std::runtime_error("Failed to open shared memory at file " + std::string(params.file_name));
+            throw std::runtime_error("Failed to open shared memory at file " + file_name);
         }
 
         // TODO: for some reason checking this return code fails in unit tests.
@@ -74,6 +75,7 @@ namespace message_transport {
 
         munmap(global_header, queue_size_bytes);
         close(fd);
+        shm_unlink(file_name.c_str());
     }
 
     MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::blocking_claim_buffer(size_t size) {
