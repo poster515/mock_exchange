@@ -18,6 +18,7 @@ target_include_directories(gateway_lib PUBLIC
 
 target_link_libraries(gateway_lib PUBLIC
     spdlog::spdlog
+    sbe
     messaging
 )
 
