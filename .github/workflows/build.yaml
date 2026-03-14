@@ -17,8 +17,9 @@ jobs:
     - name: Install CPP dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y python3 cmake build-essential
+        sudo apt-get install -y python3 build-essential
         pip install conan==2.*
+        pip install cmake==3.28.*
         conan profile detect
 
     - name: Install SBE and Java dependencies
