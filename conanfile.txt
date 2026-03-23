@@ -3,7 +3,7 @@ magic_enum/0.9.7
 spdlog/1.17.0
 benchmark/1.9.4
 libconfig/1.7.3
-args-parser/6.3.6
+args-parser/6.3.5
 
 [test_requires]
 gtest/1.17.0
