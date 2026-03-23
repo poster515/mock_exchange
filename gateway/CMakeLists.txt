@@ -2,24 +2,28 @@
 project(gateway)
 
 find_package(spdlog REQUIRED)
+find_package(libconfig REQUIRED)
+find_package(args-parser REQUIRED)
 
 # Library
-add_library(gateway_lib STATIC
+add_library(gateway STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/public/parser/FixSbeDecoder.h
     ${CMAKE_CURRENT_SOURCE_DIR}/public/parser/FixSbeEncoder.h
     FixSbeEncoder.cpp
     FixSbeDecoder.cpp
+    FixSbeGateway.cpp
 )
 
-target_include_directories(gateway_lib PUBLIC
+target_include_directories(gateway PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/public
-    ${CMAKE_CURRENT_SOURCE_DIR}/public/generated
 )
 
-target_link_libraries(gateway_lib PUBLIC
+target_link_libraries(gateway PUBLIC
     spdlog::spdlog
+    libconfig::libconfig++
     sbe
     messaging
+    polling
 )
 
 # Unit Tests
@@ -32,5 +36,6 @@ add_executable(gateway_main
 
 target_link_libraries(gateway_main
     PUBLIC
-    gateway_lib
+    args-parser::args-parser
+    gateway
 )

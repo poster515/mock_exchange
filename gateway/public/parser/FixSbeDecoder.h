@@ -12,8 +12,6 @@ class FixSbeDecoder
 {
 public:
 
-
-
     static bool decode_new_order(
         const char* buffer,
         size_t length,

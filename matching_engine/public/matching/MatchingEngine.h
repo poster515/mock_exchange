@@ -6,6 +6,7 @@ namespace matching {
      * 
      */
     class MatchingEngine {
-
-    }
+    public:
+        MatchingEngine
+    };
 }
