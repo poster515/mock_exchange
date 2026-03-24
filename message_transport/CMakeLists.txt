@@ -8,6 +8,7 @@ find_package(spdlog REQUIRED)
 # Library
 add_library(messaging STATIC
     ${PUBLIC_INCLUDE_DIR}/mpsc_ipc_queue.h
+    ${PUBLIC_INCLUDE_DIR}/SpinPolicy.h
     mpsc_ipc_queue.cpp
 )
 
@@ -22,11 +23,5 @@ target_link_libraries(messaging PUBLIC
 # Unit Tests
 add_subdirectory(test)
 add_subdirectory(benchmark)
+add_subdirectory(example)
 
-# Producer Binary
-add_executable(producer test_producer.cpp)
-target_link_libraries(producer PRIVATE messaging)
-
-# Consumer Binary
-add_executable(consumer test_consumer.cpp)
-target_link_libraries(consumer PRIVATE messaging)

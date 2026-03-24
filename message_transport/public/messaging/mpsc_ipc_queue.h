@@ -10,6 +10,7 @@
 #include <spdlog/spdlog.h>
 
 #include "mpsc_ipc_queue_headers.h"
+#include "SpinPolicy.h"
 
 using namespace std::chrono_literals;
 
@@ -50,7 +51,6 @@ namespace message_transport {
             std::string_view file_name;
             size_t queue_size;
             bool is_writer {true};
-            std::optional<CallbackModel> callback {std::nullopt};
         };
         
         MpscIpcQueue(MpscQueueParameters&& params);
@@ -58,14 +58,16 @@ namespace message_transport {
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 
         // returned wrapper, the buffer will be committed to the queue.
-        MpscIpcQueueRaiiWriterWrapper blocking_claim_buffer(size_t size, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT);
-
-        std::optional<MpscIpcQueueRaiiWriterWrapper> nonblocking_claim_buffer(size_t size, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT);
+        template <CSpinPolicy WritePolicy>
+        MpscIpcQueueRaiiWriterWrapper claim_buffer(size_t size);
 
         // public API that exposes a single, non-blocking call for the consumer to poll for new messages in the queue.
         // This method will return immediately if there are no new messages available, and will return a wrapper around 
         // the message buffer if a new message is available for the consumer to read.
         std::optional<MpscIpcQueueRaiiReaderWrapper> poll_buffer();
+
+        template <CSpinPolicy ReadPolicy>
+        MpscIpcQueueRaiiReaderWrapper read_buffer();
 
         void release_buffer(MessageHeader& header);
 
@@ -89,8 +91,6 @@ namespace message_transport {
 
         int fd;
 
-        std::thread read_thread;
-
         // if the queue owner is the reader this can optionally be looped forever, reading messages
         // as they become available in the queue, and then processing them using some user-provided callback function.
         // returns whether the queue should continue to poll or not.
@@ -98,7 +98,8 @@ namespace message_transport {
 
         void insert_skip_message(const uint64_t skip_offset);
 
-        inline uint64_t wait_for_next_write_offset(const size_t total_size_with_header, std::chrono::nanoseconds timeout = DEFAULT_WRITER_TIMEOUT) {
+        template <CSpinPolicy WritePolicy>
+        inline uint64_t wait_for_next_write_offset(const size_t total_size_with_header) {
 
             /**
              * This is a critical piece of code - basically writers must come here when the attempt to claim
@@ -134,7 +135,7 @@ namespace message_transport {
             bool must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
 
             while (must_wait) {
-                std::this_thread::sleep_for(timeout);
+                WritePolicy::execute();
                 read_begin = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
                 must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
             }
