@@ -8,8 +8,7 @@ int main() {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = "/dev/shm/queue_test",
             .queue_size = message_transport::MpscIpcQueue::MAX_QUEUE_SIZE_BYTES,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
 
@@ -17,7 +16,7 @@ int main() {
 
     auto producer1 = std::thread([&queue]() {
         for (int i : std::ranges::iota_view{0, TOTAL_MESSAGES / 2}) {
-            auto wrapper = queue.blocking_claim_buffer(sizeof(uint32_t));
+            auto wrapper = queue.claim_buffer<message_transport::SleepPolicy>(sizeof(uint32_t));
             const uint32_t temp = static_cast<uint32_t>(i);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&temp), sizeof(int));
             std::this_thread::sleep_for(std::chrono::nanoseconds(500));
@@ -26,7 +25,7 @@ int main() {
 
     auto producer2 = std::thread([&queue]() {
         for (int i : std::ranges::iota_view{TOTAL_MESSAGES / 2, TOTAL_MESSAGES}) {
-            auto wrapper = queue.blocking_claim_buffer(sizeof(uint32_t));
+            auto wrapper = queue.claim_buffer<message_transport::SleepPolicy>(sizeof(uint32_t));
             const uint32_t temp = static_cast<uint32_t>(i);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&temp), sizeof(int));
             std::this_thread::sleep_for(std::chrono::nanoseconds(500));

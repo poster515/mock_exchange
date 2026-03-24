@@ -33,8 +33,7 @@ TEST_F(MpscIpcQueueTest, BasicWriteAndRead) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -42,14 +41,13 @@ TEST_F(MpscIpcQueueTest, BasicWriteAndRead) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
     std::string_view test_data = "Hello, World!";
 
-    auto wrapper = writer.blocking_claim_buffer(test_data.size());
+    auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(test_data.size());
     ASSERT_TRUE(wrapper.write_to_buffer(test_data.data(), test_data.size()));
     wrapper.~MpscIpcQueueRaiiWriterWrapper(); // explicitly call the destructor to commit the message to the queue
 
@@ -67,8 +65,7 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -76,8 +73,7 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -90,7 +86,7 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
 
     // Fill the queue
     for (int i : std::ranges::iota_view{0, num_messages_to_fill}) {
-        auto wrapper = writer.blocking_claim_buffer(msg_size);
+        auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(msg_size);
         int value { i };
         wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(int));
         written_values.push_back(value);
@@ -100,7 +96,7 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
     std::thread producer([&writer, &producer_blocked, msg_size]() {
         producer_blocked.store(true, std::memory_order_release);
         int value = 999;
-        auto wrapper = writer.blocking_claim_buffer(msg_size);
+        auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(msg_size);
         wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(int));
         producer_blocked.store(false, std::memory_order_release);
     });
@@ -137,8 +133,7 @@ TEST_F(MpscIpcQueueTest, BasicQueueWrapping) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -146,8 +141,7 @@ TEST_F(MpscIpcQueueTest, BasicQueueWrapping) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -155,7 +149,7 @@ TEST_F(MpscIpcQueueTest, BasicQueueWrapping) {
     const auto iters_to_fill_buffer = (SMALL_QUEUE_SIZE - sizeof(message_transport::MessageHeader)) / (message.size() + sizeof(message_transport::MessageHeader));
 
     for (auto i = 0; i < iters_to_fill_buffer; ++i) {
-        auto wrapper = writer.blocking_claim_buffer(message.size());
+        auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(message.size());
         ASSERT_TRUE(wrapper.write_to_buffer(message.data(), message.size()));
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
@@ -171,7 +165,7 @@ TEST_F(MpscIpcQueueTest, BasicQueueWrapping) {
 
     // now we can write one more message which should wrap around to the beginning of the queue
     {
-        auto wrapper = writer.blocking_claim_buffer(message.size());
+        auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(message.size());
         ASSERT_TRUE(wrapper.write_to_buffer(message.data(), message.size()));
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -189,8 +183,7 @@ TEST_F(MpscIpcQueueTest, MultipleMessagesSequential) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -198,15 +191,14 @@ TEST_F(MpscIpcQueueTest, MultipleMessagesSequential) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
     const std::vector<std::string_view> messages = {"msg1", "msg2", "msg3"};
 
     for (const auto& msg : messages) {
-        auto wrapper = writer.blocking_claim_buffer(msg.size());
+        auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(msg.size());
         ASSERT_TRUE(wrapper.write_to_buffer(msg.data(), msg.size()));
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
@@ -225,8 +217,7 @@ TEST_F(MpscIpcQueueTest, SlowProducerFastConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -234,8 +225,7 @@ TEST_F(MpscIpcQueueTest, SlowProducerFastConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -246,7 +236,7 @@ TEST_F(MpscIpcQueueTest, SlowProducerFastConsumer) {
 
     auto producer = [&writer, &written_values]() {
         for (int i : std::ranges::iota_view{0, NUM_MESSAGES}) {
-            auto wrapper = writer.blocking_claim_buffer(sizeof(int));
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(int));
             ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&i), sizeof(int)));
             written_values.push_back(i);
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -282,8 +272,7 @@ TEST_F(MpscIpcQueueTest, FastProducerSlowConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -291,8 +280,7 @@ TEST_F(MpscIpcQueueTest, FastProducerSlowConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -304,7 +292,7 @@ TEST_F(MpscIpcQueueTest, FastProducerSlowConsumer) {
 
     auto producer = [&writer, &written_values]() {
         for (int i : std::ranges::iota_view{0, NUM_MESSAGES}) {
-            auto wrapper = writer.blocking_claim_buffer(sizeof(int));
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(int));
             ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&i), sizeof(int)));
             written_values.push_back(i);
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -341,8 +329,7 @@ TEST_F(MpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -350,8 +337,7 @@ TEST_F(MpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -362,7 +348,7 @@ TEST_F(MpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
     const int NUM_MESSAGES = iters_to_fill_buffer * 1.5; // write enough messages to fill the buffer and cause wrap around
     auto producer = [&writer, &written_values, &NUM_MESSAGES]() {
         for (int i : std::ranges::iota_view{0, NUM_MESSAGES}) {
-            auto wrapper = writer.blocking_claim_buffer(sizeof(uint64_t));
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint64_t));
             const uint64_t value = static_cast<uint64_t>(i);
             ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t)));
             written_values.push_back(value);
@@ -400,11 +386,10 @@ TEST_F(MpscIpcQueueTest, ExceedQueueCapacity) {
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
             .is_writer = true,
-            .callback = std::nullopt
         }
     };
 
-    ASSERT_THROW(auto wrapper = writer.blocking_claim_buffer(QUEUE_SIZE + 1), std::runtime_error);
+    ASSERT_THROW(auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(QUEUE_SIZE + 1), std::runtime_error);
 }
 
 TEST_F(MpscIpcQueueTest, ReaderCannotClaim) {
@@ -412,8 +397,7 @@ TEST_F(MpscIpcQueueTest, ReaderCannotClaim) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -421,11 +405,10 @@ TEST_F(MpscIpcQueueTest, ReaderCannotClaim) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
-    EXPECT_THROW(reader.blocking_claim_buffer(64), std::runtime_error);
+    EXPECT_THROW(reader.claim_buffer<message_transport::SleepPolicy>(64), std::runtime_error);
 }
 
 TEST_F(MpscIpcQueueTest, WriterCannotPoll) {
@@ -433,8 +416,7 @@ TEST_F(MpscIpcQueueTest, WriterCannotPoll) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
 
@@ -446,8 +428,7 @@ TEST_F(MpscIpcQueueTest, LargeMessageSequence) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -455,8 +436,7 @@ TEST_F(MpscIpcQueueTest, LargeMessageSequence) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -467,7 +447,7 @@ TEST_F(MpscIpcQueueTest, LargeMessageSequence) {
     auto producer = [&writer, &written_data, large_msg_size]() {
         for (int i = 0; i < 5; ++i) {
             std::vector<char> data(large_msg_size, static_cast<char>(i));
-            auto wrapper = writer.blocking_claim_buffer(large_msg_size);
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(large_msg_size);
             wrapper.write_to_buffer(data.data(), data.size());
             written_data.push_back(data);
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -504,8 +484,7 @@ TEST_F(MpscIpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -513,8 +492,7 @@ TEST_F(MpscIpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -539,7 +517,7 @@ TEST_F(MpscIpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
                 static_cast<unsigned long long>(i * 9999999)
             };
 
-            auto wrapper = writer.blocking_claim_buffer(sizeof(TestMessage));
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(TestMessage));
             ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&msg), sizeof(TestMessage)));
             written_messages.push_back(msg);
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -578,8 +556,7 @@ TEST_F(MpscIpcQueueTest, LongRunningProducerConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -587,8 +564,7 @@ TEST_F(MpscIpcQueueTest, LongRunningProducerConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -600,7 +576,7 @@ TEST_F(MpscIpcQueueTest, LongRunningProducerConsumer) {
 
     auto producer = [&writer, &written_values, NUM_MESSAGES]() {
         for (uint64_t i = 0; i < NUM_MESSAGES; ++i) {
-            auto wrapper = writer.blocking_claim_buffer(sizeof(uint64_t));
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint64_t));
             const uint64_t value = i;
             ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t)));
             written_values.push_back(value);
@@ -637,8 +613,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -646,8 +621,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -663,7 +637,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     auto producer1 = [&writer1, &producer1_values, num_messages_per_producer, msg_size]() {
         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
             const int32_t value = i;
-            auto wrapper = writer1.blocking_claim_buffer(msg_size);
+            auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
             producer1_values.insert(value);
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
@@ -674,7 +648,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     auto producer2 = [&writer1, &producer2_values, num_messages_per_producer, msg_size]() {
         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
             const int32_t value = i + num_messages_per_producer;
-            auto wrapper = writer1.blocking_claim_buffer(msg_size);
+            auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
             producer2_values.insert(value);
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
@@ -685,7 +659,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     auto producer3 = [&writer1, &producer3_values, num_messages_per_producer, msg_size]() {
         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
             const int32_t value = i + (num_messages_per_producer * 2);
-            auto wrapper = writer1.blocking_claim_buffer(msg_size);
+            auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
             producer3_values.insert(value);
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
@@ -696,7 +670,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
     auto producer4 = [&writer1, &producer4_values, num_messages_per_producer, msg_size]() {
         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
             const int32_t value = i + (num_messages_per_producer * 3);
-            auto wrapper = writer1.blocking_claim_buffer(msg_size);
+            auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
             producer4_values.insert(value);
             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
@@ -742,8 +716,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -751,8 +724,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -763,7 +735,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
     auto byte_producer = [&writer, &uint8_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const uint8_t value = static_cast<uint8_t>(i);
-            auto wrapper = writer.blocking_claim_buffer(sizeof(uint8_t));
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint8_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint8_t));
             uint8_values.insert(value);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -774,7 +746,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
     auto uint32_producer = [&writer, &uint32_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const uint32_t value = static_cast<uint32_t>(i + NUM_MESSAGES);
-            auto wrapper = writer.blocking_claim_buffer(sizeof(uint32_t));
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint32_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint32_t));
             uint32_values.insert(value);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -785,7 +757,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
     auto uint64_producer = [&writer, &uint64_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const uint64_t value = static_cast<uint64_t>(i + (NUM_MESSAGES * 2));
-            auto wrapper = writer.blocking_claim_buffer(sizeof(uint64_t));
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint64_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t));
             uint64_values.insert(value);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -796,7 +768,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
     auto str_producer = [&writer, &written_strings, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const auto msg = std::format("Hello #{}!!!!", i);
-            auto wrapper = writer.blocking_claim_buffer(msg.size());
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(msg.size());
             wrapper.write_to_buffer(msg.c_str(), msg.size());
             written_strings.insert(msg);
             std::this_thread::sleep_for(std::chrono::microseconds(100));

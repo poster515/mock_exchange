@@ -15,7 +15,6 @@ namespace message_transport {
             : file_name(params.file_name)
             , queue_size_bytes(params.queue_size + sizeof(GlobalHeader)) 
             , available_queue_size_bytes(params.queue_size)
-            , dispatcher(params.callback)
             , is_writer(params.is_writer) {
 
         if (params.queue_size > MAX_QUEUE_SIZE_BYTES) {
@@ -61,26 +60,17 @@ namespace message_transport {
                 // in a real implementation, we would want to use a more efficient synchronization mechanism here (e.g. futexes or condition variables) to avoid busy waiting and reduce CPU usage.
                 std::this_thread::yield();
             }
-
-            if (params.callback.has_value()) {
-                read_thread = std::thread([this](){
-                    while(this->read_buffer());
-                });
-            }
         }
     }
 
     MpscIpcQueue::~MpscIpcQueue() {
-        if (read_thread.joinable()) {
-            read_thread.join();
-        }
-
         munmap(global_header, queue_size_bytes);
         close(fd);
         shm_unlink(file_name.c_str());
     }
 
-    MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::blocking_claim_buffer(size_t size, std::chrono::nanoseconds timeout) {
+    template <CSpinPolicy WritePolicy>
+    MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer(size_t size) {
         
         // determine a starting point in the shared memory for the producer to write the message, 
         // and return a wrapper that will commit the buffer to the queue upon destruction.
@@ -95,14 +85,14 @@ namespace message_transport {
         const auto total_message_len = size + sizeof(MessageHeader);
 
         // first we claim the next write location, no matter what. Also waits for any slow reader
-        const auto abs_write_offset = wait_for_next_write_offset(total_message_len, timeout);
+        const auto abs_write_offset = wait_for_next_write_offset<WritePolicy>(total_message_len);
         const auto rel_write_offset = abs_write_offset % available_queue_size_bytes;
         const auto bytes_remaining_at_end = available_queue_size_bytes - rel_write_offset;
 
         // we may have claimed a spot at the end of the buffer that needs a skip message instead. Check, insert, and try again.
         if ((total_message_len + sizeof(MessageHeader)) > bytes_remaining_at_end) {
             insert_skip_message(rel_write_offset);
-            return blocking_claim_buffer(size, timeout);
+            return claim_buffer<WritePolicy>(size);
         }
 
         // we successfully claimed a region for writing, and the new write offset is within the bounds of the queue.
@@ -116,10 +106,6 @@ namespace message_transport {
 
         // spdlog::info("Claimed relative offset {} with total size {} bytes (bytes at end {}, total avail {})", rel_write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
         return MpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
-    }
-
-    std::optional<MpscIpcQueueRaiiWriterWrapper> MpscIpcQueue::nonblocking_claim_buffer(size_t size, std::chrono::nanoseconds timeout) {
-        return std::nullopt;
     }
 
     std::optional<MpscIpcQueueRaiiReaderWrapper> MpscIpcQueue::poll_buffer() {
@@ -171,13 +157,15 @@ namespace message_transport {
         const auto abs_read_offset = global_header->read_fields.read_offset.fetch_add(total_message_len, std::memory_order_acq_rel);
     }
 
-    bool MpscIpcQueue::read_buffer() {
-        auto read_wrapper = poll_buffer();
-        if (read_wrapper.has_value()) {
-            return (*dispatcher)(std::move(*read_wrapper));
+    template <CSpinPolicy ReadPolicy>
+    MpscIpcQueueRaiiReaderWrapper MpscIpcQueue::read_buffer() {
+        while (true) {
+            auto read_wrapper = poll_buffer();
+            if (read_wrapper.has_value()) {
+                return std::move(*read_wrapper);
+            }
+            ReadPolicy::execute();
         }
-        // if there's no return value - indicate that we want to continue to poll.
-        return true;
     }
 
     void MpscIpcQueue::insert_skip_message(const uint64_t skip_offset) {
@@ -193,4 +181,14 @@ namespace message_transport {
         message_header->type = MessageType::PADDING;
         message_header->commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
     }
+
+    template MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer<BusyWaitPolicy>(size_t n);
+    template MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer<YieldPolicy>(size_t n);
+    template MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer<SleepPolicy>(size_t n);
+    template MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer<HybridPolicy>(size_t n);
+
+    template MpscIpcQueueRaiiReaderWrapper MpscIpcQueue::read_buffer<BusyWaitPolicy>();
+    template MpscIpcQueueRaiiReaderWrapper MpscIpcQueue::read_buffer<YieldPolicy>();
+    template MpscIpcQueueRaiiReaderWrapper MpscIpcQueue::read_buffer<SleepPolicy>();
+    template MpscIpcQueueRaiiReaderWrapper MpscIpcQueue::read_buffer<HybridPolicy>();
 }

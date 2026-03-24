@@ -22,6 +22,7 @@ static void pin_thread(size_t cpu)
 #endif
 }
 
+template <message_transport::CSpinPolicy WriteSpinPolicy, message_transport::CSpinPolicy ReadSpinPolicy>
 static void BM_MpscQueueThroughput(benchmark::State& state)
 {
     const size_t producers   = state.range(0);
@@ -59,7 +60,7 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
 
             while (!stop.load(std::memory_order_relaxed))
             {
-                auto writer = write_queue.blocking_claim_buffer(message_size, timeout);
+                auto writer = write_queue.claim_buffer<WriteSpinPolicy>(message_size);
 				benchmark::DoNotOptimize(writer.write_to_buffer(reinterpret_cast<const char*>(message.data()), message_size));
                 benchmark::DoNotOptimize(produced.value.fetch_add(1, std::memory_order_relaxed));
 				std::this_thread::sleep_for(std::chrono::nanoseconds(10));
@@ -79,13 +80,9 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
     start.store(true, std::memory_order_release);
 
     for (auto _ : state){
-
-		auto wrapper = read_queue.poll_buffer();
-		if (wrapper) {
-			benchmark::DoNotOptimize(wrapper->copy_contents_into(read_message_buffer.data(), read_message_buffer.size()));
-			benchmark::DoNotOptimize(consumed.value.fetch_add(1, std::memory_order_relaxed));
-		}
-		std::this_thread::sleep_for(std::chrono::nanoseconds(10));
+        auto wrapper = read_queue.read_buffer<ReadSpinPolicy>();
+        benchmark::DoNotOptimize(wrapper.copy_contents_into(read_message_buffer.data(), read_message_buffer.size()));
+        benchmark::DoNotOptimize(consumed.value.fetch_add(1, std::memory_order_relaxed));
     }
 
     stop.store(true, std::memory_order_release);
@@ -101,12 +98,35 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
             benchmark::Counter::kIsRate);
 }
 
-BENCHMARK(BM_MpscQueueThroughput)
+BENCHMARK_TEMPLATE(BM_MpscQueueThroughput, message_transport::BusyWaitPolicy, message_transport::BusyWaitPolicy)
     ->Args({1, 64})
     ->Args({2, 64})
     ->Args({4, 64})
     ->Args({8, 64})
     ->Args({4, 256})
-    // ->Args({4, 1024})
-    ->MinTime(5)
-    ->Iterations(1 << 10);
+    ->Iterations(1 << 10)
+    ->UseRealTime();
+BENCHMARK_TEMPLATE(BM_MpscQueueThroughput, message_transport::YieldPolicy, message_transport::SleepPolicy)
+    ->Args({1, 64})
+    ->Args({2, 64})
+    ->Args({4, 64})
+    ->Args({8, 64})
+    ->Args({4, 256})
+    ->Iterations(1 << 10)
+    ->UseRealTime();
+BENCHMARK_TEMPLATE(BM_MpscQueueThroughput, message_transport::SleepPolicy, message_transport::SleepPolicy)
+    ->Args({1, 64})
+    ->Args({2, 64})
+    ->Args({4, 64})
+    ->Args({8, 64})
+    ->Args({4, 256})
+    ->Iterations(1 << 10)
+    ->UseRealTime();
+BENCHMARK_TEMPLATE(BM_MpscQueueThroughput, message_transport::HybridPolicy, message_transport::SleepPolicy)
+    ->Args({1, 64})
+    ->Args({2, 64})
+    ->Args({4, 64})
+    ->Args({8, 64})
+    ->Args({4, 256})
+    ->Iterations(1 << 10)
+    ->UseRealTime();
