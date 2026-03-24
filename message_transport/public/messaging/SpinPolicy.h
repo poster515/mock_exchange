@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined(__x86_64__) || defined(__i386__)
+    #include <immintrin.h>
+#endif
+
 #include <type_traits>
 #include <concepts>
 
@@ -8,7 +12,7 @@ namespace message_transport {
 
     struct BusyWaitPolicy {
         static void execute() noexcept {
-            #if defined(__x86_64__) || defined(_M_X64)
+            #if defined(__x86_64__) || defined(__i386__)
                 #include <immintrin.h>
                 _mm_pause();
             #elif defined(__aarch64__)
