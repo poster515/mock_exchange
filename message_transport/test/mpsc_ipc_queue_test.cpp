@@ -33,8 +33,7 @@ TEST_F(MpscIpcQueueTest, BasicWriteAndRead) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -42,8 +41,7 @@ TEST_F(MpscIpcQueueTest, BasicWriteAndRead) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -67,8 +65,7 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -76,8 +73,7 @@ TEST_F(MpscIpcQueueTest, ProducerBlocksWhenQueueFull) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -137,8 +133,7 @@ TEST_F(MpscIpcQueueTest, BasicQueueWrapping) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -146,8 +141,7 @@ TEST_F(MpscIpcQueueTest, BasicQueueWrapping) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -189,8 +183,7 @@ TEST_F(MpscIpcQueueTest, MultipleMessagesSequential) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -198,8 +191,7 @@ TEST_F(MpscIpcQueueTest, MultipleMessagesSequential) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -225,8 +217,7 @@ TEST_F(MpscIpcQueueTest, SlowProducerFastConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -234,8 +225,7 @@ TEST_F(MpscIpcQueueTest, SlowProducerFastConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -282,8 +272,7 @@ TEST_F(MpscIpcQueueTest, FastProducerSlowConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -291,8 +280,7 @@ TEST_F(MpscIpcQueueTest, FastProducerSlowConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -341,8 +329,7 @@ TEST_F(MpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -350,8 +337,7 @@ TEST_F(MpscIpcQueueTest, QueueWrapAroundFastProducerSlowConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -400,7 +386,6 @@ TEST_F(MpscIpcQueueTest, ExceedQueueCapacity) {
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
             .is_writer = true,
-            .callback = std::nullopt
         }
     };
 
@@ -412,8 +397,7 @@ TEST_F(MpscIpcQueueTest, ReaderCannotClaim) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -421,8 +405,7 @@ TEST_F(MpscIpcQueueTest, ReaderCannotClaim) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
     EXPECT_THROW(reader.claim_buffer<message_transport::SleepPolicy>(64), std::runtime_error);
@@ -433,8 +416,7 @@ TEST_F(MpscIpcQueueTest, WriterCannotPoll) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
 
@@ -446,8 +428,7 @@ TEST_F(MpscIpcQueueTest, LargeMessageSequence) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -455,8 +436,7 @@ TEST_F(MpscIpcQueueTest, LargeMessageSequence) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -504,8 +484,7 @@ TEST_F(MpscIpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -513,8 +492,7 @@ TEST_F(MpscIpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -578,8 +556,7 @@ TEST_F(MpscIpcQueueTest, LongRunningProducerConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -587,8 +564,7 @@ TEST_F(MpscIpcQueueTest, LongRunningProducerConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -637,8 +613,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -646,8 +621,7 @@ TEST_F(MpscIpcQueueTest, TwoProducersOneConsumer) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 
@@ -742,8 +716,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -751,8 +724,7 @@ TEST_F(MpscIpcQueueTest, MultiProducerDifferentTypes) {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .callback = std::nullopt
+            .is_writer = false
         }
     );
 

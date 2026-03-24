@@ -8,8 +8,7 @@ int main() {
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = "/dev/shm/queue_test",
             .queue_size = message_transport::MpscIpcQueue::MAX_QUEUE_SIZE_BYTES,
-            .is_writer = true,
-            .callback = std::nullopt
+            .is_writer = true
         }
     };
 
