@@ -16,6 +16,7 @@ namespace polling
 
     class IPollable {
     public:
+        virtual ~IPollable() = default;
         virtual void PollOnce() = 0;
         virtual void Initialize() = 0;
         virtual void StopPolling() = 0;

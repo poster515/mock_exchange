@@ -5,17 +5,20 @@
 
 namespace polling
 {
-    template <typename...PollableBuilders>
-        requires (CPollableBuilder<PollableBuilders> && ...)
+
     class RuntimePollRunnerBuilder
     {
         public:
             RuntimePollRunnerBuilder() = default;
 
-            template <CPollableBuilder Builder_T> 
-            RuntimePollRunnerBuilder& add_pollable(Builder_T pollable)
+            template <CPollableBuilder Builder_T>
+            RuntimePollRunnerBuilder& add_pollable(Builder_T&& builder)
             {
-                pollables.emplace_back(std::move(pollable));
+                pollable_builders.emplace_back(
+                    [b = std::forward<Builder_T>(builder)]() mutable {
+                        return b();
+                    }
+                );
                 return *this;
             }
 
@@ -25,7 +28,7 @@ namespace polling
 
         private:
             // vector of lambdas that take a memory location and construct a pollable in place
-            std::vector<PollableBuilders...> pollable_builders;
+            std::vector<PollableFactory> pollable_builders;
     };
 
 }

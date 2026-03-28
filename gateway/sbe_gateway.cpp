@@ -1,6 +1,9 @@
 #include <iostream>
-#include <libconfig.h++>
+
 #include <args-parser/all.hpp>
+
+#include "utils/Config.h"
+#include "gateway/FixSbeGateway.h"
 
 
 int main(int argc, char* argv[]) {
@@ -46,9 +49,15 @@ int main(int argc, char* argv[]) {
         return(EXIT_FAILURE);
     }
 
-    // start up gateway
-    
+    auto logger = spdlog::daily_logger_mt("gateway_logger", "/var/log/gateway.log", 2, 30, false, 7);
 
+    // start up gateway
+    try {
+        gateway::FixSbeGateway gateway(common::CommonComponents{ config, *logger.get() });
+        gateway.run();
+    } catch (std::exception& e) {
+        std::cout << std::format("Encountered error during runtime: {}", e.what());
+    }
     //...profit?
     return 0;
 }

@@ -7,6 +7,7 @@ project(sandbox LANGUAGES CXX)
 
 enable_testing()
 
+add_subdirectory(common)
 add_subdirectory(polling)
 add_subdirectory(sbe_messages)
 add_subdirectory(gateway)

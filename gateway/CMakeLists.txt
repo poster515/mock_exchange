@@ -1,8 +1,6 @@
 
 project(gateway)
 
-find_package(spdlog REQUIRED)
-find_package(libconfig REQUIRED)
 find_package(args-parser REQUIRED)
 
 # Library
@@ -19,9 +17,8 @@ target_include_directories(gateway PUBLIC
 )
 
 target_link_libraries(gateway PUBLIC
-    spdlog::spdlog
-    libconfig::libconfig++
     sbe
+    utils
     messaging
     polling
 )

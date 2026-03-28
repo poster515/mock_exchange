@@ -5,13 +5,13 @@
 
 namespace polling
 {
+    using PollableFactory = std::function<std::unique_ptr<IPollable>()>;
+    
     class RuntimePollRunner : public IPollRunner
     {
     public:
-        template <typename...PollableBuilder_Ts>
-            requires (CPollableBuilder<PollableBuilder_Ts> && ...)
-        RuntimePollRunner(PollableBuilder_Ts&&... builders) {
-            (pollables.emplace_back(std::invoke(builders)), ... );
+        RuntimePollRunner(const std::vector<PollableFactory>& builders) {
+            for (auto builder : builders) { pollables.emplace_back(std::invoke(builder)); }
         }
 
         void PollAll() override final {
@@ -20,6 +20,7 @@ namespace polling
 
         bool StartPolling() override final {
             for (auto& pollable : pollables) { pollable->Initialize(); }
+            return true;
         }
 
         void StopPolling() override final {
