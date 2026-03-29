@@ -1,28 +1,28 @@
-#include "gateway/FixSbeGateway.h"
+#include "gateway/SbeGateway.h"
 
 #include "polling/RuntimePollRunnerBuilder.h"
 
 namespace gateway {
-    FixSbeGateway::FixSbeGateway(common::CommonComponents&& components)
+    SbeGateway::SbeGateway(common::CommonComponents&& components)
         : publish_queue(message_transport::MpscIpcQueue::MpscQueueParameters{
-            .file_name = std::string(FixSbeGateway::DEFAULT_QUEUE_NAME),
-            .queue_size = FixSbeGateway::DEFAULT_QUEUE_SIZE
+            .file_name = std::string(SbeGateway::DEFAULT_QUEUE_NAME),
+            .queue_size = SbeGateway::DEFAULT_QUEUE_SIZE
         })
         , pollrunner(nullptr) {
 
     }
 
-    void FixSbeGateway::run() {
+    void SbeGateway::run() {
         // TODO
         initialize();
         // poll
     }
 
-    void FixSbeGateway::stop() {
+    void SbeGateway::stop() {
         this->running = false;
     }
 
-    void FixSbeGateway::initialize() {
+    void SbeGateway::initialize() {
         auto builder = polling::RuntimePollRunnerBuilder();
         pollrunner = builder.add_pollable([]() -> std::unique_ptr<polling::IPollable> { return nullptr; }).build_runner();
     }

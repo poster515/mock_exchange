@@ -3,15 +3,16 @@
 #include <args-parser/all.hpp>
 
 #include "utils/Config.h"
-#include "gateway/FixSbeGateway.h"
+#include "gateway/SbeGateway.h"
 
 
 int main(int argc, char* argv[]) {
 
     std::string config_file_name;
 
-    try {
+    auto logger = spdlog::daily_logger_mt("gateway_logger", "/var/log/gateway.log", 2, 30, false, 7);
 
+    try {
         // get command line args
         Args::CmdLine cmd(argc, argv, Args::CmdLine::CommandIsRequired);
         cmd.addArgWithFlagAndName( 'b', "bool", false, false, "Boolean flag",
@@ -24,15 +25,17 @@ int main(int argc, char* argv[]) {
 
         cmd.parse();
 
-        if(cmd.isDefined("-v")) {
-            config_file_name = cmd.value("-v");
+        if(cmd.isDefined("-f")) {
+            config_file_name = cmd.value("-f");
         }
-    } catch(const Args::HelpHasBeenPrintedException&)
+    }
+    catch(const Args::HelpHasBeenPrintedException&)
     {
         return 0;
-    } catch(const Args::BaseException& x )
+    }
+    catch(const Args::BaseException& x)
     {
-        std::cout << x.desc() << "\n";
+        logger->error("Command line error: {}", x.desc());
         return 1;
     }
 
@@ -43,21 +46,27 @@ int main(int argc, char* argv[]) {
     {
         config.readFile(config_file_name);
     }
-    catch(const libconfig::FileIOException &fioex)
+    catch(const libconfig::FileIOException& fioex)
     {
-        std::cerr << "I/O error while reading file." << std::endl;
+        logger->warn("I/O error while reading config file: {}, err: {}", config_file_name, fioex.what());
+        return(EXIT_FAILURE);
+    }
+    catch(const libconfig::ParseException& pex)
+    {
+        logger->warn("Parse error at {}: {} - {}", pex.getFile(), pex.getLine(), pex.getError());
         return(EXIT_FAILURE);
     }
 
-    auto logger = spdlog::daily_logger_mt("gateway_logger", "/var/log/gateway.log", 2, 30, false, 7);
-
     // start up gateway
     try {
-        gateway::FixSbeGateway gateway(common::CommonComponents{ config, *logger.get() });
+        gateway::SbeGateway gateway(common::CommonComponents{ config, *logger.get() });
         gateway.run();
-    } catch (std::exception& e) {
-        std::cout << std::format("Encountered error during runtime: {}", e.what());
     }
-    //...profit?
+    catch (std::exception& e)
+    {
+        logger->error("Encountered error during runtime: {}", e.what());
+        return 1;
+    }
+
     return 0;
 }

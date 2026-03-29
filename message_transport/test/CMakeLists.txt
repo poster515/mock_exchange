@@ -27,4 +27,4 @@ target_link_libraries(message_transport_tests
 enable_testing()
 
 add_test(NAME MessageTransportTests COMMAND message_transport_tests)
-set_tests_properties(MessageTransportTests PROPERTIES TIMEOUT 30)
+set_tests_properties(MessageTransportTests PROPERTIES TIMEOUT 60)

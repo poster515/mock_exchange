@@ -16,12 +16,12 @@ namespace gateway {
      * There may be many different kinds of gateway (order, market_data, etc),
      * so this is intended to be generic enough of an interface for now.
      */
-    class FixSbeGateway : virtual public common::IApplicationService{
+    class SbeGateway : virtual public common::IApplicationService{
         static constexpr std::string_view DEFAULT_QUEUE_NAME = "/dev/shm/gateway_queue";
         static constexpr size_t DEFAULT_QUEUE_SIZE = 1 << 20; // 1MB
 
     public:
-        FixSbeGateway(common::CommonComponents&& components);
+        SbeGateway(common::CommonComponents&& components);
         void run() override final;
         void stop() override final;
 

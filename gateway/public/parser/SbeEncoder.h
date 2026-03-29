@@ -2,8 +2,8 @@
 
 #include <array>
 #include <cstdint>
-#include "generated/exchange_order/MessageHeader.h"
-#include "generated/exchange_order/NewOrderSingle.h"
+#include "sbe/generated/exchange_order/MessageHeader.h"
+#include "sbe/generated/exchange_order/NewOrderSingle.h"
 
 namespace exchange::order {
 
@@ -13,7 +13,7 @@ struct EncodedMessage
     size_t length;
 };
 
-class Encoder
+class SbeEncoder
 {
 public:
 
