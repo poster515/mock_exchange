@@ -113,34 +113,31 @@ namespace message_transport {
             throw std::runtime_error("Producer cannot poll for messages in the queue");
         }
 
+        // if the distance between the read and write offsets is less than the size of a message
+        // header, then there are no complete messages to read, so we return nullopt.
         const auto abs_read_offset = global_header->read_fields.read_offset.load(std::memory_order_acquire);
+        const auto abs_write_offset = global_header->write_fields.write_offset.load(std::memory_order_acquire);
+        if ((abs_write_offset - abs_read_offset) < sizeof(MessageHeader)) {
+            return std::nullopt;
+        }
+
         const auto rel_read_offset = abs_read_offset % available_queue_size_bytes;
 
         void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + rel_read_offset + sizeof(GlobalHeader));
         auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
-        auto block_state = message_header->commit_flag.load(std::memory_order_acquire);
 
-        switch (block_state) {
-            case CommitFlag::READY_FOR_CONSUMER: {
+        const auto total_message_len = message_header->message_size + sizeof(MessageHeader);
 
-                const auto total_message_len = message_header->message_size + sizeof(MessageHeader);
-
-                if (message_header->type == MessageType::PADDING) {
-                    // if this is a padding message, we need to skip it and move the read offset to the next message after the padding message.
-                    // spdlog::info("Polled skip message at offset {} with size {}, bytes (total size with header: {} bytes), skipping to beginning of queue", rel_read_offset, message_header->message_size, total_message_len);
-                    release_buffer(*message_header);
-                    return poll_buffer();
-                }
-
-                // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
-                // spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", rel_read_offset, message_header->message_size, total_message_len);
-                return MpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
-            }
-            case CommitFlag::NOT_READY:
-            default: {
-                return std::nullopt;
-            }
+        if (message_header->type == MessageType::PADDING) {
+            // if this is a padding message, we need to skip it and move the read offset to the next message after the padding message.
+            // spdlog::info("Polled skip message at offset {} with size {}, bytes (total size with header: {} bytes), skipping to beginning of queue", rel_read_offset, message_header->message_size, total_message_len);
+            release_buffer(*message_header);
+            return poll_buffer();
         }
+
+        // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
+        // spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", rel_read_offset, message_header->message_size, total_message_len);
+        return MpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
     }
 
     void MpscIpcQueue::release_buffer(MessageHeader& header) {
@@ -153,7 +150,6 @@ namespace message_transport {
         header.message_size = 0;
         header.sequence_number = 0;
         header.type = MessageType::NORMAL;
-        header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
         const auto abs_read_offset = global_header->read_fields.read_offset.fetch_add(total_message_len, std::memory_order_acq_rel);
     }
 
@@ -179,7 +175,6 @@ namespace message_transport {
         message_header->sequence_number = 0;
         message_header->message_size = padding_size;
         message_header->type = MessageType::PADDING;
-        message_header->commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
     }
 
     template MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer<BusyWaitPolicy>(size_t n);

@@ -18,7 +18,8 @@ int main() {
     );
 
     const int TOTAL_MESSAGES = 1'000'000;
-    std::vector<uint32_t> received_values(TOTAL_MESSAGES);
+    std::vector<uint32_t> received_values;
+    received_values.reserve(TOTAL_MESSAGES);
     spdlog::info("Consumer started, waiting for {} values", TOTAL_MESSAGES);
 
     size_t count = 0;
@@ -30,20 +31,12 @@ int main() {
             assert(wrapper->get_payload_size() == sizeof(uint32_t));
             received_values.push_back(wrapper->get_as<uint32_t>());
             ++count;
-            // spdlog::info("Received value {}, total_received: {}", value, received_values.size());
         }
         std::this_thread::sleep_for(std::chrono::nanoseconds(10));
     }
 
     const auto end = std::chrono::high_resolution_clock::now();
 
-    spdlog::info("Received all {} values in {} us", TOTAL_MESSAGES, (end - start).count());
+    spdlog::info("Received all {} values in {} us, recv_size: {}", TOTAL_MESSAGES, (end - start).count(), received_values.size());
     assert(received_values.size() == TOTAL_MESSAGES);
-
-    // uint32_t expected = 0;
-    // for (int i : std::ranges::iota_view{0, TOTAL_MESSAGES}) {
-    //     if (!received_values.contains(static_cast<uint32_t>(i))) {
-    //         spdlog::error("Expected value {} but did not find it!!!", i);
-    //     }
-    // }
 }
