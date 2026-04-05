@@ -1,11 +1,12 @@
-#include <iostream>
+
 
 #include <args-parser/all.hpp>
 
 #include "utils/Config.h"
-#include "gateway/SbeGateway.h"
+#include "ledger/Ledger.h"
 
 std::vector<std::reference_wrapper<common::IApplicationService>> applications;
+std::atomic_bool quit;
 
 void signal_handler(int signal) {
     for (auto app : applications) {
@@ -64,17 +65,13 @@ int main(int argc, char* argv[]) {
         return(EXIT_FAILURE);
     }
 
-    // start up gateway
-    try {
-        gateway::SbeGateway gateway(common::CommonComponents{ config, *logger.get() });
-        applications.push_back(gateway);
-        gateway.run();
-    }
-    catch (std::exception& e)
-    {
-        logger->error("Encountered error during runtime: {}", e.what());
-        return 1;
-    }
+    ledger::Ledger ledger(common::CommonComponents{
+        .config = config,
+        .logger = logger
+    });
 
-    return 0;
+    applications.push_back(ledger);
+    ledger.start();
+    while (!quit.load(std::memory_order_relaxed));
+    logger->info("exiting application");
 }

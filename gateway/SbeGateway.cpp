@@ -27,7 +27,7 @@ namespace gateway {
         pollrunner = builder.add_pollable([]() -> std::unique_ptr<polling::IPollable> { return nullptr; }).build_runner();
     }
 
-    void poll() {
+    void SbeGateway::poll() {
 
     }
 }
