@@ -43,9 +43,6 @@ namespace message_transport {
 
         static bool is_power_of_two(size_t n) { return n != 0 && (n & (n - 1)) == 0; }
 
-        // Could make this a class template/concept but for now we'll leave it as a suboptimal function.
-        using CallbackModel = std::function<bool(MpscIpcQueueRaiiReaderWrapper)>;
-
         // TODO: if we can assert queue_size_bytes as power of 2 we can use masking instead of mod-ing for offset calcs
         struct MpscQueueParameters {
             std::string_view file_name;
@@ -86,8 +83,6 @@ namespace message_transport {
 
         // grab and/or set the state of the shared memory region
         message_transport::GlobalHeader* global_header;
-
-        std::optional<CallbackModel> dispatcher;
 
         int fd;
 

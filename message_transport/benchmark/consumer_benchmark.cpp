@@ -25,13 +25,15 @@ static void pin_thread(size_t cpu)
 template <message_transport::CSpinPolicy WriteSpinPolicy, message_transport::CSpinPolicy ReadSpinPolicy>
 static void BM_MpscQueueThroughput(benchmark::State& state)
 {
+    const std::string folder = std::getenv("RUNNER_TEMP");
+
     const size_t producers   = state.range(0);
     const size_t message_size = state.range(1);
     const size_t queue_size   = 1 << 20; // 1 MB
     const std::chrono::nanoseconds timeout = std::chrono::nanoseconds(1);
 
     message_transport::MpscIpcQueue write_queue(message_transport::MpscIpcQueue::MpscQueueParameters {
-		.file_name = "/dev/shm/queue_benchmark",
+		.file_name = folder + "/queue_benchmark",
 		.queue_size = queue_size
 	});
 
@@ -69,7 +71,7 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
     }
 
 	message_transport::MpscIpcQueue read_queue(message_transport::MpscIpcQueue::MpscQueueParameters {
-		.file_name = "/dev/shm/queue_benchmark",
+		.file_name = folder + "/queue_benchmark",
 		.queue_size = queue_size,
 		.is_writer = false,
 	});
