@@ -89,10 +89,7 @@ namespace message_transport {
         // ideally only test function, but you could get cheeky with this.
         [[nodiscard]] const void* get_buffer() const {
             auto* message_header = reinterpret_cast<MessageHeader*>(wrapper.data());
-            if (message_header->commit_flag.load(std::memory_order_acquire) == CommitFlag::READY_FOR_CONSUMER) {
-                return static_cast<void*>(wrapper.data() + sizeof(MessageHeader));
-            }
-            return nullptr; // message is not available for reading
+            return static_cast<void*>(wrapper.data() + sizeof(MessageHeader));
         }
 
         const size_t get_payload_size() const {
@@ -124,8 +121,6 @@ namespace message_transport {
             auto* hdr = reinterpret_cast<MessageHeader*>(wrapper.data());
             std::memcpy(wrapper.data() + sizeof(MessageHeader), data, size);
 
-            // publish to consumer atomically
-            hdr->commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
             return true;
         }
     };

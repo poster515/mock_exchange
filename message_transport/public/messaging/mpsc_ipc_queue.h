@@ -106,34 +106,23 @@ namespace message_transport {
              */
             
             auto write_offset = global_header->write_fields.write_offset.load(std::memory_order_relaxed);
-
-            size_t bytes_remaining_at_end {0};
-            uint64_t rel_write_offset {0};
             uint64_t next_write_offset {0};
-
             do {
-                rel_write_offset = write_offset % available_queue_size_bytes;
-                bytes_remaining_at_end = available_queue_size_bytes - rel_write_offset;
+                const auto rel_write_offset = write_offset % available_queue_size_bytes;
+                const size_t bytes_remaining_at_end = available_queue_size_bytes - rel_write_offset;
+                next_write_offset = write_offset + std::min(total_size_with_header, bytes_remaining_at_end);
                 
-                if ((total_size_with_header + sizeof(MessageHeader)) <= bytes_remaining_at_end) {
-                    // if we can fit our message plus another MessageHeader, cool! Try to claim.
-                    next_write_offset = write_offset + total_size_with_header;
-                } else {
-                    // otherwise, try to bump the next_write_offset to the beginning of the queue.
-                    // We'll handle the skip message insertion later.
-                    next_write_offset = write_offset + bytes_remaining_at_end;
+                // now we have a potential write location claimed. May have to spin if the reader hasn't caught up yet.
+                auto read_begin = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
+                bool must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
+
+                while (must_wait) {
+                    WritePolicy::execute();
+                    read_begin = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
+                    must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
                 }
+
             } while(!global_header->write_fields.write_offset.compare_exchange_weak(write_offset, next_write_offset, std::memory_order_release, std::memory_order_relaxed));
-
-            // now we have a write location claimed. May have to spin if the reader hasn't caught up yet.
-            auto read_begin = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
-            bool must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
-
-            while (must_wait) {
-                WritePolicy::execute();
-                read_begin = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
-                must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
-            }
 
             return write_offset;
         }
