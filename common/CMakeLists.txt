@@ -13,4 +13,5 @@ target_include_directories(utils INTERFACE
 target_link_libraries(utils INTERFACE
     spdlog::spdlog
     libconfig::libconfig++
+    polling
 )

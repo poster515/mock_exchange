@@ -12,6 +12,10 @@ namespace gateway {
 
     }
 
+    void SbeGateway::start() {
+        // TODO;
+    }
+
     void SbeGateway::run() {
         // TODO
         initialize();

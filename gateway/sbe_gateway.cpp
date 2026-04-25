@@ -66,7 +66,7 @@ int main(int argc, char* argv[]) {
 
     // start up gateway
     try {
-        gateway::SbeGateway gateway(common::CommonComponents{ config, *logger.get() });
+        gateway::SbeGateway gateway(common::CommonComponents{ config, *logger.get(), nullptr });
         applications.push_back(gateway);
         gateway.run();
     }

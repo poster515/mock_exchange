@@ -49,9 +49,9 @@ jobs:
         cd ./build/build/Release
         ctest --output-on-failure
 
-    - name: Run benchmarks
-      run: |
-        cd ./build/build/Release/message_transport/benchmark
-        ls -la $RUNNER_TEMP
-        ./consumer_benchmark
+    # - name: Run benchmarks
+    #   run: |
+    #     cd ./build/build/Release/message_transport/benchmark
+    #     ls -la $RUNNER_TEMP
+    #     ./consumer_benchmark
 

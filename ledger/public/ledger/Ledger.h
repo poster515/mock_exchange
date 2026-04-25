@@ -18,6 +18,8 @@ namespace ledger {
     public:
         Ledger(common::CommonComponents&& components);
 
-        void start();
+        void start() override final;
+        void run() override final;
+        void stop() override final;
     };
 }

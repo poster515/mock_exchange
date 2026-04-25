@@ -67,7 +67,8 @@ int main(int argc, char* argv[]) {
 
     ledger::Ledger ledger(common::CommonComponents{
         .config = config,
-        .logger = logger
+        .logger = logger,
+        .cores = std::make_unique<polling::CoreAffinity>()
     });
 
     applications.push_back(ledger);

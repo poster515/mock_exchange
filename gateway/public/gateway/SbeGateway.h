@@ -22,6 +22,7 @@ namespace gateway {
 
     public:
         SbeGateway(common::CommonComponents&& components);
+        void start() override final;
         void run() override final;
         void stop() override final;
 
