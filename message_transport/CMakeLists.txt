@@ -13,7 +13,7 @@ add_library(messaging STATIC
 )
 
 target_include_directories(messaging PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/public
+    ${CMAKE_CURRENT_SOURCE_DIR}/public/
 )
 
 target_link_libraries(messaging PUBLIC
@@ -31,7 +31,6 @@ target_include_directories(archive PUBLIC
 )
 
 target_link_libraries(archive PUBLIC
-    spdlog::spdlog
     utils
 )
 

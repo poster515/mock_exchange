@@ -1,4 +1,5 @@
 #include "archive/MpscArchiveMediaDriver.h"
+#include "archive/ArchiveSbeMessages.h"
 
 #include "messaging/mpsc_ipc_queue_element_wrapper.h"
 
@@ -39,6 +40,18 @@ namespace archive
 
     void MpscArchiveMediaDriver::process_message(std::span<const std::byte> message)
     {
-        
+        const auto* message_header = reinterpret_cast<const archive::ArchiveMessageHeader*>(message.data());
+        switch (message_header->message_type)
+        {
+            case archive::MessageType::START_RECORDING: {
+                break;
+            }
+            case archive::MessageType::STOP_RECORDING: {
+                break;
+            }
+            default: {
+                break;
+            }
+        }
     }
 }
