@@ -15,16 +15,16 @@ using namespace message_transport;
 
 class MpscIpcQueueTest : public ::testing::Test {
 protected:
-    static constexpr const char* SHM_NAME = "/mpsc_ipc_queue_test";
+    static constexpr const char* SHM_NAME = "/dev/shm/mpsc_ipc_queue_test";
     static constexpr size_t QUEUE_SIZE = 4096;
     static constexpr size_t SMALL_QUEUE_SIZE = 128;
 
     void SetUp() override {
-        // shm_unlink(SHM_NAME);
+        shm_unlink(SHM_NAME);
     }
 
     void TearDown() override {
-        // shm_unlink(SHM_NAME);
+        shm_unlink(SHM_NAME);
     }
 };
 
@@ -401,7 +401,7 @@ TEST_F(MpscIpcQueueTest, ReaderCannotClaim) {
         }
     };
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    MpscIpcQueue reader(
+    message_transport::MpscIpcQueue reader(
         message_transport::MpscIpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,

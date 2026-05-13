@@ -8,7 +8,7 @@ namespace archive
     MpscArchiveMediaDriver::MpscArchiveMediaDriver(MpscArchiveParams&& p)
         : params(std::move(p))
         , queue(message_transport::MpscIpcQueue::MpscQueueParameters {
-            .file_name = DEFAULT_SHM_NAME, // config lib doesn't support string_view getters
+            .file_name = std::string(DEFAULT_SHM_NAME), // config lib doesn't support string_view getters
             .queue_size = params.comps.config.lookup("mpsc_queue.queue_size"),
             .is_writer = false
         })
@@ -35,7 +35,7 @@ namespace archive
     }
 
     void MpscArchiveMediaDriver::stop() {
-
+        
     }
 
     void MpscArchiveMediaDriver::process_message(std::span<const std::byte> message)

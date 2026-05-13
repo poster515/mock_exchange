@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 #include <format>
+#include <queue>
 
 
 namespace message_transport {
@@ -23,50 +24,89 @@ namespace message_transport {
             throw std::runtime_error("Queue size is not a power of 2! Please revise.");
         }
 
-        fd = shm_open(params.file_name.data(), O_CREAT | O_RDWR, 0666);
+        // assume file exists already and we are simply opening it
+        bool file_creator = false;
+        fd = shm_open(params.file_name.c_str(), O_RDWR, 0666);
 
         if (fd == -1) {
-            throw std::runtime_error("Failed to open shared memory at file " + file_name);
+            spdlog::info("Unable to open file {}, attempting to create...", params.file_name);
+            fd = shm_open(params.file_name.c_str(), O_CREAT | O_RDWR | O_EXCL, 0666);
+            file_creator = true;
         }
 
-        // TODO: for some reason checking this return code fails in unit tests.
+        if (fd == -1) throw std::runtime_error("Failed to open shared memory at file " + file_name);
+
+        if (file_creator) init_new_file();
+        else validate_settings();
+
+        if (!is_writer) global_header->read_fields.has_reader.store(true, std::memory_order_release);
+        else global_header->write_fields.num_writers.fetch_add(1);
+    }
+
+    void MpscIpcQueue::init_new_file() {
         std::ignore = ftruncate(fd, queue_size_bytes);
-        void* ptr = mmap(nullptr, queue_size_bytes,
-                        PROT_READ | PROT_WRITE,
-                        MAP_SHARED,
-                        fd, 0);
-        
-        // anytime we want to access read_ or write_offset, we just reinterpret_cast
-        // global_header to a void* and then add the appropriate offset to get to the correct position in
-        // shared memory, and then cast that to a pointer to the appropriate type (e.g. std::atomic<size_t>*).
+        void* ptr = mmap(nullptr, queue_size_bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
         global_header = static_cast<GlobalHeader*>(ptr);
 
-        if (is_writer) {
-            // if we're the writer, we need to initialize the global header to set the initial state of the queue.
-            global_header->write_fields.queue_size_bytes.store(queue_size_bytes, std::memory_order_relaxed);
-            global_header->write_fields.message_count.store(0, std::memory_order_relaxed);
-            global_header->read_fields.has_writer.store(true, std::memory_order_release);
+        // yeet the whole queue to a known value (0 = MESSAGE_UNKNOWN which is ok for writing)
+        memset(reinterpret_cast<uint8_t*>(global_header) + sizeof(GlobalHeader), 0, available_queue_size_bytes);
 
-            global_header->write_fields.write_offset.store(0, std::memory_order_release);
-            global_header->read_fields.read_offset.store(0, std::memory_order_release);
+        // set some writer fields
+        global_header->write_fields.write_offset.store(0, std::memory_order_release);
+        global_header->write_fields.queue_size_bytes.store(queue_size_bytes, std::memory_order_release);
+        global_header->write_fields.message_count.store(0, std::memory_order_release);
+        global_header->write_fields.num_writers.store(0, std::memory_order_release);
 
-            // yeet the whole queue to a known value (0 = MESSAGE_UNKNOWN which is ok for writing)
-            memset(reinterpret_cast<uint8_t*>(global_header) + sizeof(GlobalHeader), 0, available_queue_size_bytes);
-        } else {
+        // and some reader fields
+        global_header->read_fields.read_offset.store(0, std::memory_order_release);
 
-            // if we're the reader, we need to wait until the writer has initialized the global header before we can safely read from it.
-            while (!global_header->read_fields.has_writer.load(std::memory_order_acquire)) {
-                // busy wait until writer has initialized the global header
-                // in a real implementation, we would want to use a more efficient synchronization mechanism here (e.g. futexes or condition variables) to avoid busy waiting and reduce CPU usage.
-                std::this_thread::yield();
-            }
+        // and finally the global metadata
+        global_header->magic.store(MAGIC, std::memory_order_release);
+    }
+
+    void MpscIpcQueue::validate_settings() {
+        void* ptr = mmap(nullptr, sizeof(GlobalHeader), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        global_header = static_cast<GlobalHeader*>(ptr);
+
+        if (global_header->magic.load(std::memory_order_relaxed) != MAGIC) {
+            throw std::runtime_error("Queue is uninitialized!");
         }
+
+        const auto actual = global_header->write_fields.queue_size_bytes.load(std::memory_order_acquire);
+        if (actual != queue_size_bytes) {
+            spdlog::warn("Actual queue sz={} bytes, was configured for {} bytes", actual, queue_size_bytes);
+            queue_size_bytes = actual;
+            available_queue_size_bytes = queue_size_bytes - sizeof(GlobalHeader);
+        }
+
+        // unmap and remap with correct length
+        munmap(ptr, sizeof(GlobalHeader));
+        ptr = mmap(nullptr, actual, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        global_header = static_cast<GlobalHeader*>(ptr);
     }
 
     MpscIpcQueue::~MpscIpcQueue() {
+        if (!is_writer) {
+            global_header->read_fields.has_reader.exchange(false);
+        } else {
+            global_header->write_fields.num_writers.fetch_sub(1);
+        }
+
+        const auto num_writers = global_header->write_fields.num_writers.load(std::memory_order_seq_cst);
+        const auto has_reader = global_header->read_fields.has_reader.load(std::memory_order_seq_cst);
+
         munmap(global_header, queue_size_bytes);
         close(fd);
-        shm_unlink(file_name.c_str());
+        if (num_writers == 0) {
+            if (!is_writer) {
+                spdlog::info("Reader removing file without writers");
+                shm_unlink(file_name.c_str());
+            } else if (is_writer && !has_reader) {
+                spdlog::info("Last writer deleting file without reader");
+                shm_unlink(file_name.c_str());
+            }
+        }
     }
 
     template <CSpinPolicy WritePolicy>

@@ -38,6 +38,7 @@ namespace message_transport {
      */
     class MpscIpcQueue {
     public:
+        static constexpr uint32_t MAGIC = 0xDEADBEEF;
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
         static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
 
@@ -45,9 +46,10 @@ namespace message_transport {
 
         // TODO: if we can assert queue_size_bytes as power of 2 we can use masking instead of mod-ing for offset calcs
         struct MpscQueueParameters {
-            std::string_view file_name;
+            const std::string file_name;
             size_t queue_size;
             bool is_writer {true};
+            bool force_override_create_file {false}; // for writers, setting this allows us to create a dev/shm file without a reader. Currently only a test feature.
         };
         
         MpscIpcQueue(MpscQueueParameters&& params);
@@ -78,13 +80,16 @@ namespace message_transport {
 
         // the total size of the queue in bytes, which will be used to manage the shared 
         // memory and ensure that messages do not exceed the queue capacity.
-        const size_t queue_size_bytes;
-        const size_t available_queue_size_bytes;
+        size_t queue_size_bytes;
+        size_t available_queue_size_bytes;
 
         // grab and/or set the state of the shared memory region
         message_transport::GlobalHeader* global_header;
 
         int fd;
+
+        void init_new_file();
+        void validate_settings();
 
         // if the queue owner is the reader this can optionally be looped forever, reading messages
         // as they become available in the queue, and then processing them using some user-provided callback function.

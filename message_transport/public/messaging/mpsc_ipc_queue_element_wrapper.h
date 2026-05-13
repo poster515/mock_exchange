@@ -80,7 +80,7 @@ namespace message_transport {
 
         // Use this for non-owning views e.g., string_view, span, etc.
         template <typename T, typename D = char>
-            requires std::is_trivially_copyable_v<T>
+            requires std::is_trivially_copyable_v<T> && (sizeof(D) == sizeof(std::byte))
         [[nodiscard]] T get_as_view() const {
             auto* message_payload = static_cast<void*>(wrapper.data() + sizeof(MessageHeader));
             return T(reinterpret_cast<const D*>(message_payload), wrapper.size_bytes() - sizeof(MessageHeader));

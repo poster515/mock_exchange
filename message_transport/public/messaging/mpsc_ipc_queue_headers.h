@@ -10,11 +10,11 @@ namespace message_transport {
         std::atomic<uint64_t> write_offset; // unscaled offset from the end of the global header of the raw mapped memory region, to the next available buffer region for writing
         std::atomic<uint64_t> message_count; // total number of messages written to the queue
         std::atomic<uint64_t> queue_size_bytes; // total size of the queue in bytes, used for managing the shared memory and ensuring messages do not exceed the queue capacity
+        std::atomic<uint32_t> num_writers;
     };
 
     struct ReadFields {
         std::atomic<uint64_t> read_offset;  // unscaled offset from the end of the global header of the raw mapped memory region, to the next available buffer region for reading
-        std::atomic_bool has_writer;
         std::atomic_bool has_reader;
     };
 
@@ -24,8 +24,14 @@ namespace message_transport {
     using WritePadding = Padding<WriteFields, 64>;
     using ReadPadding = Padding<ReadFields, 64>;
 
+    using MagicNumber = std::atomic<uint32_t>;
+    using MagicPadding = Padding<MagicNumber, 64>;
+
     // global header structure that will be placed at the beginning of the shared memory region
     struct GlobalHeader {
+        MagicNumber magic;
+        MagicPadding padding;
+
         WriteFields write_fields;
         WritePadding write_padding;
 
@@ -33,7 +39,7 @@ namespace message_transport {
         ReadPadding read_padding;
     };
 
-    static_assert(sizeof(GlobalHeader) == 128, "sizeof(GlobalHeader) is not 128");
+    static_assert(sizeof(GlobalHeader) == 192, "sizeof(GlobalHeader) is not 192");
 
     enum class MessageType : uint32_t {
         NORMAL = 0x00,
