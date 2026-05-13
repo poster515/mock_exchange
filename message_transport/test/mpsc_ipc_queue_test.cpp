@@ -15,7 +15,7 @@ using namespace message_transport;
 
 class MpscIpcQueueTest : public ::testing::Test {
 protected:
-    static constexpr const char* SHM_NAME = "/dev/shm/mpsc_ipc_queue_test";
+    static constexpr const char* SHM_NAME = "/mpsc_ipc_queue_test";
     static constexpr size_t QUEUE_SIZE = 4096;
     static constexpr size_t SMALL_QUEUE_SIZE = 128;
 
