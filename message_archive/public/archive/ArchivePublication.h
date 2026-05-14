@@ -1,6 +1,7 @@
 #pragma once
 
 #include <span>
+#include <queue>
 
 #include "messaging/mpsc_ipc_queue.h"
 #include "messaging/mpsc_ipc_queue_element_wrapper.h"
