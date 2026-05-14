@@ -18,7 +18,7 @@ int main() {
     );
 
     const int TOTAL_MESSAGES = 1'000'000;
-    std::vector<uint32_t> received_values(TOTAL_MESSAGES);
+    std::vector<uint32_t> received_values;
     spdlog::info("Consumer started, waiting for {} values", TOTAL_MESSAGES);
 
     size_t count = 0;

@@ -10,6 +10,7 @@ find_package(args-parser REQUIRED)
 # Archive Library
 add_library(archive STATIC
     MpscArchiveMediaDriver.cpp
+    ArchivePublication.cpp
 )
 
 target_include_directories(archive PUBLIC

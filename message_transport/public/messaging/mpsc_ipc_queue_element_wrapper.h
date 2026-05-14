@@ -110,23 +110,32 @@ namespace message_transport {
     public:
         MpscIpcQueueRaiiWriterWrapper(uint8_t* buffer, size_t buffer_size)
             : MpscIpcQueueRaiiWrapper(buffer, buffer_size) {}
-        // by deleting eery other constructor and assignment operator we are guaranteeing that the 
-        // wrapper properly manages the memory assigned to it
+
+        // useful for container operations (emplace_back, etc)
+        MpscIpcQueueRaiiWriterWrapper(MpscIpcQueueRaiiWriterWrapper&& other)
+            : MpscIpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size()){
+        };
+        // delete all other constructors though
+        MpscIpcQueueRaiiWriterWrapper& operator=(MpscIpcQueueRaiiWriterWrapper&&) = delete;
         MpscIpcQueueRaiiWriterWrapper(const MpscIpcQueueRaiiWriterWrapper&) = delete;
         MpscIpcQueueRaiiWriterWrapper& operator=(const MpscIpcQueueRaiiWriterWrapper&) = delete;
-        MpscIpcQueueRaiiWriterWrapper(MpscIpcQueueRaiiWriterWrapper&&) = delete;
-        MpscIpcQueueRaiiWriterWrapper& operator=(MpscIpcQueueRaiiWriterWrapper&&) = delete;
 
         ~MpscIpcQueueRaiiWriterWrapper() = default;
 
         bool write_to_buffer(const char* data, size_t size) {
             assert(static_cast<size_t>(size + sizeof(MessageHeader)) <= wrapper.size_bytes());
-            auto* hdr = reinterpret_cast<MessageHeader*>(wrapper.data());
-            std::memcpy(wrapper.data() + sizeof(MessageHeader), data, size);
-
-            // publish to consumer atomically
-            hdr->commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
+            std::memcpy(wrapper.data() + sizeof(MessageHeader), data, size);  
+            commit();
             return true;
+        }
+
+        void commit() {
+            auto* hdr = reinterpret_cast<MessageHeader*>(wrapper.data());
+            hdr->commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
+        }
+
+        std::span<std::byte> get_as_span() {
+            return std::as_writable_bytes(this->wrapper);
         }
     };
 }

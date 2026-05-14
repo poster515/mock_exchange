@@ -109,6 +109,10 @@ namespace message_transport {
         }
     }
 
+    bool MpscIpcQueue::has_reader() const {
+        return global_header->read_fields.has_reader.load(std::memory_order_acquire);
+    }
+
     template <CSpinPolicy WritePolicy>
     MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer(size_t size) {
         

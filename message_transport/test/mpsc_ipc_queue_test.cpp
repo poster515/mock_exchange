@@ -20,11 +20,11 @@ protected:
     static constexpr size_t SMALL_QUEUE_SIZE = 128;
 
     void SetUp() override {
-        shm_unlink(SHM_NAME);
+        // shm_unlink(SHM_NAME);
     }
 
     void TearDown() override {
-        shm_unlink(SHM_NAME);
+        // shm_unlink(SHM_NAME);
     }
 };
 

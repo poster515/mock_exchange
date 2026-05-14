@@ -9,8 +9,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include "mpsc_ipc_queue_headers.h"
-#include "SpinPolicy.h"
+#include "messaging/mpsc_ipc_queue_headers.h"
+#include "messaging/SpinPolicy.h"
 
 using namespace std::chrono_literals;
 
@@ -44,12 +44,10 @@ namespace message_transport {
 
         static bool is_power_of_two(size_t n) { return n != 0 && (n & (n - 1)) == 0; }
 
-        // TODO: if we can assert queue_size_bytes as power of 2 we can use masking instead of mod-ing for offset calcs
         struct MpscQueueParameters {
             const std::string file_name;
             size_t queue_size;
             bool is_writer {true};
-            bool force_override_create_file {false}; // for writers, setting this allows us to create a dev/shm file without a reader. Currently only a test feature.
         };
         
         MpscIpcQueue(MpscQueueParameters&& params);
@@ -69,6 +67,8 @@ namespace message_transport {
         MpscIpcQueueRaiiReaderWrapper read_buffer();
 
         void release_buffer(MessageHeader& header);
+
+        bool has_reader() const;
 
     private:
 
