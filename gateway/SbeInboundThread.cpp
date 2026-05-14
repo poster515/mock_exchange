@@ -49,7 +49,7 @@ namespace gateway {
 
             server_socket = pollfd{
                 .fd = raw_socket,
-                .events = POLL_IN,
+                .events = POLLIN,
                 .revents = POLLOUT
             };
             return true;
