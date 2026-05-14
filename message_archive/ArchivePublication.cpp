@@ -1,6 +1,7 @@
 #include "archive/ArchivePublication.h"
 
 #include <ranges>
+#include <algorithm>
 
 namespace archive {
     ArchivePublication::ArchivePublication(ArchivePublicationParams&& params)
