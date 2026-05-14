@@ -30,5 +30,6 @@ namespace common {
         /**
          * TODO: gather configs, setup logger, run service.
          */
+        return 0;
     }
 }

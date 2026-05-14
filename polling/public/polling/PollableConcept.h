@@ -3,6 +3,7 @@
 #include <type_traits>
 #include <concepts>
 #include <functional>
+#include <memory>
 
 namespace polling
 {

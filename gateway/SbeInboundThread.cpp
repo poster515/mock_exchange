@@ -6,6 +6,7 @@
 #include <netinet/ip.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdio.h> // perror
 
 namespace gateway {
 
@@ -63,7 +64,7 @@ namespace gateway {
             int new_fd = accept(server_socket.fd, (struct sockaddr*)&incoming, &len);
             const auto fd_read = poll(&server_socket, 1, 0 /* timeout */); // timeout of 0 returns immediately if nothing available.
             
-            if (fd_read > 0 && server_socket.revents & POLL_IN) {
+            if (fd_read > 0 && server_socket.revents & POLLIN) {
                 // get data off the socket and forward to logon handler
                 // new_fd
             }
