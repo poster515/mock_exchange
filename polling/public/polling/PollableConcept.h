@@ -9,16 +9,17 @@ namespace polling
     template <typename Pollable_T>
     concept CPollableType = requires(Pollable_T pollable)
     {
-        { pollable.PollOnce() } -> std::convertible_to<void>;
         { pollable.Initialize() } -> std::convertible_to<bool>;
+        { pollable.PollOnce() } -> std::convertible_to<size_t>;
         { pollable.StopPolling() } -> std::convertible_to<void>;
     };
 
     class IPollable {
     public:
         virtual ~IPollable() = default;
-        virtual void PollOnce() = 0;
-        virtual void Initialize() = 0;
+
+        virtual bool Initialize() = 0;
+        virtual size_t PollOnce() = 0;
         virtual void StopPolling() = 0;
     };
 

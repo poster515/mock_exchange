@@ -32,6 +32,5 @@ namespace gateway {
         std::unique_ptr<polling::IPollRunner> pollrunner;
 
         void initialize();
-        void poll();
     };
 }

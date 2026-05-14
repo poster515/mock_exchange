@@ -14,17 +14,20 @@ namespace polling
             for (auto builder : builders) { pollables.emplace_back(std::invoke(builder)); }
         }
 
-        void PollAll() override final {
-            for (auto& pollable : pollables) { pollable->PollOnce(); }
+        size_t PollAll() override final {
+            size_t work_done = 0;
+            for (auto& pollable : pollables) work_done += pollable->PollOnce();
+            return work_done;
         }
 
         bool StartPolling() override final {
-            for (auto& pollable : pollables) { pollable->Initialize(); }
-            return true;
+            bool all_success = true;
+            for (auto& pollable : pollables) all_success &= pollable->Initialize();
+            return all_success;
         }
 
         void StopPolling() override final {
-            for (auto& pollable : pollables) { pollable->StopPolling(); }
+            for (auto& pollable : pollables) pollable->StopPolling();
         }
 
     private:

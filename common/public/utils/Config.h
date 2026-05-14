@@ -1,6 +1,7 @@
 #pragma once
 
 #include <signal.h>
+#include <concepts>
 
 #include <libconfig.h++>
 #include <spdlog/sinks/daily_file_sink.h>
@@ -23,4 +24,11 @@ namespace common {
         std::atomic_bool initialized { false };
         std::atomic_bool running { false };
     };
+
+    template <typename Service> requires std::derived_from<Service, IApplicationService>
+    static int run_service(int argc, char* argv[]) {
+        /**
+         * TODO: gather configs, setup logger, run service.
+         */
+    }
 }

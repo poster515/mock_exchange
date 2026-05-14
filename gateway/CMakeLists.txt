@@ -5,11 +5,10 @@ find_package(args-parser REQUIRED)
 
 # Library
 add_library(gateway STATIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/public/parser/SbeDecoder.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/public/parser/SbeEncoder.h
     SbeEncoder.cpp
     SbeDecoder.cpp
     SbeGateway.cpp
+    SbeInboundThread.cpp
 )
 
 target_include_directories(gateway PUBLIC

@@ -7,7 +7,7 @@ namespace polling
         public:
             virtual ~IPollRunner() = default;
             virtual bool StartPolling() = 0;
-            virtual void PollAll() = 0;
+            virtual size_t PollAll() = 0;
             virtual void StopPolling() = 0;
     };
 }
