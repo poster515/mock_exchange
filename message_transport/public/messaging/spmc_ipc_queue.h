@@ -15,8 +15,9 @@ namespace message_transport {
      * The implementation uses shared memory and synchronization primitives to achieve efficient communication without busy-waiting.
      * If a callback is provided, a new thread will be spawned which constantly polls the buffer. See consumer.cpp for an example.
      *
+     * TODO: Can we just consolidate with MpscQueue? Write semantics are almost identical.
      */
-    class SpMcIpcQueue {
+    class SpmcIpcQueue {
     public:
 
         struct SpmcQueueParameters {
@@ -25,8 +26,8 @@ namespace message_transport {
             bool is_writer {true};
         };
         
-        SpMcIpcQueue(SpmcQueueParameters&& params);
-        ~SpMcIpcQueue();
+        SpmcIpcQueue(SpmcQueueParameters&& params);
+        ~SpmcIpcQueue();
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 
         // returned wrapper, the buffer will be committed to the queue. Only available for the 

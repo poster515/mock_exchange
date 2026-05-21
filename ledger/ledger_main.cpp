@@ -18,7 +18,7 @@ int main(int argc, char* argv[]) {
 
     std::string config_file_name;
 
-    auto logger = spdlog::daily_logger_mt("gateway_logger", "/var/log/gateway.log", 2, 30, false, 7);
+    auto logger = spdlog::daily_logger_mt("ledger_logger", "/var/log/ledger.log", 2, 30, false, 7);
 
     try {
         // get command line args

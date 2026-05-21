@@ -4,6 +4,7 @@
     #include <immintrin.h>
 #endif
 
+#include <thread>
 #include <type_traits>
 #include <concepts>
 

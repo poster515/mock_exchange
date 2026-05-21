@@ -1,6 +1,9 @@
 #pragma once
 
+#include <memory>
+
 #include <utils/Config.h>
+#include "archive/ArchiveSubscription.h"
 
 namespace ledger {
     /**
@@ -21,5 +24,8 @@ namespace ledger {
         void start() override final;
         void run() override final;
         void stop() override final;
+
+    private:
+        std::unique_ptr<archive::ArchiveSubscription> subscription;
     };
 }

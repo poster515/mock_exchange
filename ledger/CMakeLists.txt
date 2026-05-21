@@ -14,10 +14,8 @@ target_include_directories(ledger PUBLIC
 )
 
 target_link_libraries(ledger PUBLIC
-    spdlog::spdlog
-    args-parser::args-parser
     utils
-    sbe_messages
+    sbe
     polling
-    messaging
+    archive # always pull in args-parser
 )
