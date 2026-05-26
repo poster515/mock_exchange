@@ -5,14 +5,14 @@
 
 #include <spdlog/spdlog.h>
 
-#include "messaging/mpsc_ipc_queue.h"
-#include "messaging/mpsc_ipc_queue_element_wrapper.h"
+#include "messaging/ipc_queue.h"
+#include "messaging/ipc_queue_element_wrapper.h"
 
 int main() {
-    message_transport::MpscIpcQueue queue(
-        message_transport::MpscIpcQueue::MpscQueueParameters{
+    message_transport::IpcQueue queue(
+        message_transport::IpcQueue::MpscQueueParameters{
             .file_name = "/dev/shm/queue_test",
-            .queue_size = message_transport::MpscIpcQueue::MAX_QUEUE_SIZE_BYTES,
+            .queue_size = message_transport::IpcQueue::MAX_QUEUE_SIZE_BYTES,
             .is_writer = false
         }
     );

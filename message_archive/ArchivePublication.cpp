@@ -10,7 +10,7 @@ namespace archive {
     }
  
     bool ArchivePublication::is_ready() const {
-        return queue.has_reader();
+        return queue.num_readers() > 0;
     }
 
     size_t ArchivePublication::uncommitted_message_count() const {

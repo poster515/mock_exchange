@@ -9,7 +9,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "messaging/mpsc_ipc_queue_headers.h"
+#include "messaging/ipc_queue_headers.h"
 #include "messaging/SpinPolicy.h"
 
 using namespace std::chrono_literals;
@@ -17,8 +17,8 @@ using namespace std::chrono_literals;
 namespace message_transport {
 
     // forward decl
-    class MpscIpcQueueRaiiWriterWrapper;
-    class MpscIpcQueueRaiiReaderWrapper;
+    class IpcQueueRaiiWriterWrapper;
+    class IpcQueueRaiiReaderWrapper;
 
     // some checkers for safety
     static_assert(std::atomic<uint64_t>::is_always_lock_free);
@@ -36,7 +36,7 @@ namespace message_transport {
      * TODO: This implementation could benefit from a "hot swap" clean buffer/dirty buffer paradigm. Probably not a huge deal
      * to leave as is for now but its something worth investigating at some point.
      */
-    class MpscIpcQueue {
+    class IpcQueue {
     public:
         static constexpr uint32_t MAGIC = 0xDEADBEEF;
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
@@ -50,25 +50,25 @@ namespace message_transport {
             bool is_writer {true};
         };
         
-        MpscIpcQueue(MpscQueueParameters&& params);
-        ~MpscIpcQueue();
+        IpcQueue(MpscQueueParameters&& params);
+        ~IpcQueue();
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 
         // returned wrapper, the buffer will be committed to the queue.
         template <CSpinPolicy WritePolicy>
-        MpscIpcQueueRaiiWriterWrapper claim_buffer(size_t size);
+        IpcQueueRaiiWriterWrapper claim_buffer(size_t size);
 
         // public API that exposes a single, non-blocking call for the consumer to poll for new messages in the queue.
         // This method will return immediately if there are no new messages available, and will return a wrapper around 
         // the message buffer if a new message is available for the consumer to read.
-        std::optional<MpscIpcQueueRaiiReaderWrapper> poll_buffer();
+        std::optional<IpcQueueRaiiReaderWrapper> poll_buffer();
 
         template <CSpinPolicy ReadPolicy>
-        MpscIpcQueueRaiiReaderWrapper read_buffer();
+        IpcQueueRaiiReaderWrapper read_buffer();
 
         void release_buffer(MessageHeader& header);
 
-        bool has_reader() const;
+        size_t num_readers(std::memory_order order = std::memory_order_acquire) const;
 
     private:
 

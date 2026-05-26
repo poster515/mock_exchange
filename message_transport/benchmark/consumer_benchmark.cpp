@@ -6,7 +6,7 @@
 #include <barrier>
 #include <cstring>
 
-#include "messaging/mpsc_ipc_queue_element_wrapper.h"
+#include "messaging/ipc_queue_element_wrapper.h"
 
 struct alignas(64) PaddedCounter {
     std::atomic<uint64_t> value{0};
@@ -32,7 +32,7 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
     const size_t queue_size   = 1 << 20; // 1 MB
     const std::chrono::nanoseconds timeout = std::chrono::nanoseconds(1);
 
-    message_transport::MpscIpcQueue write_queue(message_transport::MpscIpcQueue::MpscQueueParameters {
+    message_transport::IpcQueue write_queue(message_transport::IpcQueue::MpscQueueParameters {
 		.file_name = "/dev/shm/queue_benchmark",
 		.queue_size = queue_size
 	});
@@ -70,7 +70,7 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
         });
     }
 
-	message_transport::MpscIpcQueue read_queue(message_transport::MpscIpcQueue::MpscQueueParameters {
+	message_transport::IpcQueue read_queue(message_transport::IpcQueue::MpscQueueParameters {
 		.file_name = "/dev/shm/queue_benchmark",
 		.queue_size = queue_size,
 		.is_writer = false,

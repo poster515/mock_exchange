@@ -13,7 +13,7 @@ find_package(GTest REQUIRED CONFIG)
 add_executable(message_transport_tests
     # Add your test source files here
     # example: test_example.cpp
-    mpsc_ipc_queue_test.cpp
+    ipc_queue_test.cpp
 )
 
 # Link against gtest and main library

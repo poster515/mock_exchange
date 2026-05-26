@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <cstring>
 
-#include "messaging/mpsc_ipc_queue.h"
+#include "messaging/ipc_queue.h"
 
 namespace message_transport {
 
@@ -13,20 +13,20 @@ namespace message_transport {
      * 
      * It provides a thread-safe mechanism for one producer to send messages to one consumer across process boundaries.
      */
-    class MpscIpcQueueRaiiWrapper
+    class IpcQueueRaiiWrapper
     {
     public:
-        MpscIpcQueueRaiiWrapper(uint8_t* buffer, size_t buffer_size)
+        IpcQueueRaiiWrapper(uint8_t* buffer, size_t buffer_size)
             : wrapper(buffer, buffer_size) {}
 
-        ~MpscIpcQueueRaiiWrapper() = default;
+        ~IpcQueueRaiiWrapper() = default;
 
     protected:
         std::span<uint8_t> wrapper;
     };
 
     /**
-     * RAII wrapper for the consumer side of the MPSC IPC queue. This wrapper provides methods for the consumer
+     * RAII wrapper for the consumer side of the IPC queue. This wrapper provides methods for the consumer
      * to read messages from the queue and manage the state of the message buffer.
      * 
      * The existance of this wrapper guarantees memory safe access to the memory since this is a zero-copy
@@ -35,25 +35,25 @@ namespace message_transport {
      * by the producer and that the producer does not overwrite messages that have not yet been read by the consumer.
      * 
      */
-    class MpscIpcQueueRaiiReaderWrapper : public MpscIpcQueueRaiiWrapper
+    class IpcQueueRaiiReaderWrapper : public IpcQueueRaiiWrapper
     {
     public:
-        MpscIpcQueueRaiiReaderWrapper(uint8_t* buffer, size_t buffer_size, MpscIpcQueue& queue)
-            : MpscIpcQueueRaiiWrapper(buffer, buffer_size)
+        IpcQueueRaiiReaderWrapper(uint8_t* buffer, size_t buffer_size, IpcQueue& queue)
+            : IpcQueueRaiiWrapper(buffer, buffer_size)
             , queue(queue) {}
 
-        MpscIpcQueueRaiiReaderWrapper(const MpscIpcQueueRaiiReaderWrapper&) = delete;
-        MpscIpcQueueRaiiReaderWrapper& operator=(const MpscIpcQueueRaiiReaderWrapper&) = delete;
-        MpscIpcQueueRaiiReaderWrapper(MpscIpcQueueRaiiReaderWrapper&& other)
-            : MpscIpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size())
+        IpcQueueRaiiReaderWrapper(const IpcQueueRaiiReaderWrapper&) = delete;
+        IpcQueueRaiiReaderWrapper& operator=(const IpcQueueRaiiReaderWrapper&) = delete;
+        IpcQueueRaiiReaderWrapper(IpcQueueRaiiReaderWrapper&& other)
+            : IpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size())
             , queue(other.queue) {
             // need to relinquish the other wrapper of its resources/ownership
             other.wrapper = std::span<uint8_t>();
             other.released = true;
         }
-        MpscIpcQueueRaiiReaderWrapper& operator=(MpscIpcQueueRaiiReaderWrapper&& other) = delete;
+        IpcQueueRaiiReaderWrapper& operator=(IpcQueueRaiiReaderWrapper&& other) = delete;
 
-        ~MpscIpcQueueRaiiReaderWrapper() {
+        ~IpcQueueRaiiReaderWrapper() {
             if (!released) {
                 release();
             }
@@ -102,25 +102,25 @@ namespace message_transport {
 
     private:
         bool released { false };
-        MpscIpcQueue& queue;
+        IpcQueue& queue;
     };
 
-    class MpscIpcQueueRaiiWriterWrapper : public MpscIpcQueueRaiiWrapper
+    class IpcQueueRaiiWriterWrapper : public IpcQueueRaiiWrapper
     {
     public:
-        MpscIpcQueueRaiiWriterWrapper(uint8_t* buffer, size_t buffer_size)
-            : MpscIpcQueueRaiiWrapper(buffer, buffer_size) {}
+        IpcQueueRaiiWriterWrapper(uint8_t* buffer, size_t buffer_size)
+            : IpcQueueRaiiWrapper(buffer, buffer_size) {}
 
         // useful for container operations (emplace_back, etc)
-        MpscIpcQueueRaiiWriterWrapper(MpscIpcQueueRaiiWriterWrapper&& other)
-            : MpscIpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size()){
+        IpcQueueRaiiWriterWrapper(IpcQueueRaiiWriterWrapper&& other)
+            : IpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size()){
         };
         // delete all other constructors though
-        MpscIpcQueueRaiiWriterWrapper& operator=(MpscIpcQueueRaiiWriterWrapper&&) = delete;
-        MpscIpcQueueRaiiWriterWrapper(const MpscIpcQueueRaiiWriterWrapper&) = delete;
-        MpscIpcQueueRaiiWriterWrapper& operator=(const MpscIpcQueueRaiiWriterWrapper&) = delete;
+        IpcQueueRaiiWriterWrapper& operator=(IpcQueueRaiiWriterWrapper&&) = delete;
+        IpcQueueRaiiWriterWrapper(const IpcQueueRaiiWriterWrapper&) = delete;
+        IpcQueueRaiiWriterWrapper& operator=(const IpcQueueRaiiWriterWrapper&) = delete;
 
-        ~MpscIpcQueueRaiiWriterWrapper() = default;
+        ~IpcQueueRaiiWriterWrapper() = default;
 
         bool write_to_buffer(const char* data, size_t size) {
             assert(static_cast<size_t>(size + sizeof(MessageHeader)) <= wrapper.size_bytes());

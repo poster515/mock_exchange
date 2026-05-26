@@ -1,5 +1,5 @@
-#include "messaging/mpsc_ipc_queue.h"
-#include "messaging/mpsc_ipc_queue_element_wrapper.h"
+#include "messaging/ipc_queue.h"
+#include "messaging/ipc_queue_element_wrapper.h"
 
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -12,7 +12,7 @@
 
 
 namespace message_transport {
-    MpscIpcQueue::MpscIpcQueue(MpscQueueParameters&& params)
+    IpcQueue::IpcQueue(MpscQueueParameters&& params)
             : file_name(params.file_name)
             , queue_size_bytes(params.queue_size + sizeof(GlobalHeader)) 
             , available_queue_size_bytes(params.queue_size)
@@ -20,7 +20,7 @@ namespace message_transport {
 
         if (params.queue_size > MAX_QUEUE_SIZE_BYTES) {
             throw std::runtime_error("Queue size exceeds maximum allowed size of " + std::to_string(MAX_QUEUE_SIZE_BYTES) + " bytes");
-        } else if (!MpscIpcQueue::is_power_of_two(available_queue_size_bytes)) {
+        } else if (!IpcQueue::is_power_of_two(available_queue_size_bytes)) {
             throw std::runtime_error("Queue size is not a power of 2! Please revise.");
         }
 
@@ -39,11 +39,11 @@ namespace message_transport {
         if (file_creator) init_new_file();
         else validate_settings();
 
-        if (!is_writer) global_header->read_fields.has_reader.store(true, std::memory_order_release);
+        if (!is_writer) global_header->read_fields.num_readers.fetch_add(1);
         else global_header->write_fields.num_writers.fetch_add(1);
     }
 
-    void MpscIpcQueue::init_new_file() {
+    void IpcQueue::init_new_file() {
         std::ignore = ftruncate(fd, queue_size_bytes);
         void* ptr = mmap(nullptr, queue_size_bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
@@ -60,12 +60,13 @@ namespace message_transport {
 
         // and some reader fields
         global_header->read_fields.read_offset.store(0, std::memory_order_release);
+        global_header->read_fields.num_readers.store(0, std::memory_order_release);
 
         // and finally the global metadata
         global_header->magic.store(MAGIC, std::memory_order_release);
     }
 
-    void MpscIpcQueue::validate_settings() {
+    void IpcQueue::validate_settings() {
         void* ptr = mmap(nullptr, sizeof(GlobalHeader), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         global_header = static_cast<GlobalHeader*>(ptr);
 
@@ -86,15 +87,15 @@ namespace message_transport {
         global_header = static_cast<GlobalHeader*>(ptr);
     }
 
-    MpscIpcQueue::~MpscIpcQueue() {
+    IpcQueue::~IpcQueue() {
         if (!is_writer) {
-            global_header->read_fields.has_reader.exchange(false);
+            global_header->read_fields.num_readers.fetch_sub(1);
         } else {
             global_header->write_fields.num_writers.fetch_sub(1);
         }
 
         const auto num_writers = global_header->write_fields.num_writers.load(std::memory_order_seq_cst);
-        const auto has_reader = global_header->read_fields.has_reader.load(std::memory_order_seq_cst);
+        const auto num_readers = global_header->read_fields.num_readers.load(std::memory_order_seq_cst);
 
         munmap(global_header, queue_size_bytes);
         close(fd);
@@ -102,19 +103,19 @@ namespace message_transport {
             if (!is_writer) {
                 spdlog::info("Reader removing file without writers");
                 shm_unlink(file_name.c_str());
-            } else if (is_writer && !has_reader) {
+            } else if (is_writer && !num_readers) {
                 spdlog::info("Last writer deleting file without reader");
                 shm_unlink(file_name.c_str());
             }
         }
     }
 
-    bool MpscIpcQueue::has_reader() const {
-        return global_header->read_fields.has_reader.load(std::memory_order_acquire);
+    size_t IpcQueue::num_readers(std::memory_order order) const {
+        return global_header->read_fields.num_readers.load(order);
     }
 
     template <CSpinPolicy WritePolicy>
-    MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer(size_t size) {
+    IpcQueueRaiiWriterWrapper IpcQueue::claim_buffer(size_t size) {
         
         // determine a starting point in the shared memory for the producer to write the message, 
         // and return a wrapper that will commit the buffer to the queue upon destruction.
@@ -149,10 +150,10 @@ namespace message_transport {
         new_message_header->type = MessageType::NORMAL;
 
         // spdlog::info("Claimed relative offset {} with total size {} bytes (bytes at end {}, total avail {})", rel_write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
-        return MpscIpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
+        return IpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
     }
 
-    std::optional<MpscIpcQueueRaiiReaderWrapper> MpscIpcQueue::poll_buffer() {
+    std::optional<IpcQueueRaiiReaderWrapper> IpcQueue::poll_buffer() {
         if (is_writer) {
             throw std::runtime_error("Producer cannot poll for messages in the queue");
         }
@@ -178,7 +179,7 @@ namespace message_transport {
 
                 // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
                 // spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", rel_read_offset, message_header->message_size, total_message_len);
-                return MpscIpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
+                return IpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
             }
             case CommitFlag::NOT_READY:
             default: {
@@ -187,7 +188,12 @@ namespace message_transport {
         }
     }
 
-    void MpscIpcQueue::release_buffer(MessageHeader& header) {
+    void IpcQueue::release_buffer(MessageHeader& header) {
+        
+        // if all readers haven't processed, then return
+        if (header.num_readers.fetch_sub(1, std::memory_order_acquire) > 1)
+            return;
+
         // clear the message body so its not interpreted weird if it's on a boundary next wrap around
         auto* data = reinterpret_cast<void*>(reinterpret_cast<uint8_t*>(&header) + sizeof(MessageHeader));
         memset(data, 0, header.message_size);
@@ -198,11 +204,12 @@ namespace message_transport {
         header.sequence_number = 0;
         header.type = MessageType::NORMAL;
         header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
+        header.num_readers.store(0);
         const auto abs_read_offset = global_header->read_fields.read_offset.fetch_add(total_message_len, std::memory_order_acq_rel);
     }
 
     template <CSpinPolicy ReadPolicy>
-    MpscIpcQueueRaiiReaderWrapper MpscIpcQueue::read_buffer() {
+    IpcQueueRaiiReaderWrapper IpcQueue::read_buffer() {
         while (true) {
             auto read_wrapper = poll_buffer();
             if (read_wrapper.has_value()) {
@@ -212,7 +219,7 @@ namespace message_transport {
         }
     }
 
-    void MpscIpcQueue::insert_skip_message(const uint64_t skip_offset) {
+    void IpcQueue::insert_skip_message(const uint64_t skip_offset) {
 
         // be nice and set these to 0
         auto* message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + skip_offset + sizeof(GlobalHeader));
@@ -226,13 +233,13 @@ namespace message_transport {
         message_header->commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
     }
 
-    template MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer<BusyWaitPolicy>(size_t n);
-    template MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer<YieldPolicy>(size_t n);
-    template MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer<SleepPolicy>(size_t n);
-    template MpscIpcQueueRaiiWriterWrapper MpscIpcQueue::claim_buffer<HybridPolicy>(size_t n);
+    template IpcQueueRaiiWriterWrapper IpcQueue::claim_buffer<BusyWaitPolicy>(size_t n);
+    template IpcQueueRaiiWriterWrapper IpcQueue::claim_buffer<YieldPolicy>(size_t n);
+    template IpcQueueRaiiWriterWrapper IpcQueue::claim_buffer<SleepPolicy>(size_t n);
+    template IpcQueueRaiiWriterWrapper IpcQueue::claim_buffer<HybridPolicy>(size_t n);
 
-    template MpscIpcQueueRaiiReaderWrapper MpscIpcQueue::read_buffer<BusyWaitPolicy>();
-    template MpscIpcQueueRaiiReaderWrapper MpscIpcQueue::read_buffer<YieldPolicy>();
-    template MpscIpcQueueRaiiReaderWrapper MpscIpcQueue::read_buffer<SleepPolicy>();
-    template MpscIpcQueueRaiiReaderWrapper MpscIpcQueue::read_buffer<HybridPolicy>();
+    template IpcQueueRaiiReaderWrapper IpcQueue::read_buffer<BusyWaitPolicy>();
+    template IpcQueueRaiiReaderWrapper IpcQueue::read_buffer<YieldPolicy>();
+    template IpcQueueRaiiReaderWrapper IpcQueue::read_buffer<SleepPolicy>();
+    template IpcQueueRaiiReaderWrapper IpcQueue::read_buffer<HybridPolicy>();
 }

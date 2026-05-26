@@ -5,7 +5,7 @@
 
 class ArchivePublicationTest : public ::testing::Test {
 protected:
-    static constexpr const char* SHM_NAME = "/mpsc_ipc_queue_test";
+    static constexpr const char* SHM_NAME = "/ipc_queue_test";
     static constexpr size_t QUEUE_SIZE = 4096;
     static constexpr size_t SMALL_QUEUE_SIZE = 128;
 
@@ -31,8 +31,8 @@ TEST_F(ArchivePublicationTest, PublicationCreation) {
     EXPECT_FALSE(publication.is_ready());
 
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    message_transport::MpscIpcQueue reader(
-        message_transport::MpscIpcQueue::MpscQueueParameters{
+    message_transport::IpcQueue reader(
+        message_transport::IpcQueue::MpscQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
             .is_writer = false

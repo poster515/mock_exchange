@@ -15,7 +15,7 @@ namespace message_transport {
 
     struct ReadFields {
         std::atomic<uint64_t> read_offset;  // unscaled offset from the end of the global header of the raw mapped memory region, to the next available buffer region for reading
-        std::atomic_bool has_reader;
+        std::atomic<uint32_t> num_readers;
     };
 
     template <typename T, size_t N> requires (N >= sizeof(T))
@@ -53,9 +53,10 @@ namespace message_transport {
 
     // inserted before each message in the queue to manage the state of that message and provide metadata about the message.
     struct MessageHeader {
-        uint32_t message_size;            // payload size
-        MessageType type;                 // NORMAL or PADDING
         uint64_t sequence_number;           // monotonic sequence number of message (allow to naturally wrap (lol)), starts at 0
+        uint32_t message_size;              // payload size
+        MessageType type;                   // NORMAL or PADDING
+        std::atomic<uint8_t> num_readers;    //
         std::atomic<CommitFlag> commit_flag; // 0 = not ready, 1 = ready for consumer
     };
 

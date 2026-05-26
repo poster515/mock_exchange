@@ -8,7 +8,7 @@ find_package(args-parser REQUIRED)
 
 # Queue Library
 add_library(messaging STATIC
-    mpsc_ipc_queue.cpp
+    ipc_queue.cpp
     spmc_ipc_queue.cpp
 )
 

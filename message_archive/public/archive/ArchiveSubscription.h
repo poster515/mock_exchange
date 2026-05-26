@@ -26,6 +26,6 @@ namespace archive {
 
     private:
         message_transport::SpmcIpcQueue queue;
-        std::optional<message_transport::MpscIpcQueueRaiiReaderWrapper> reader;
+        std::optional<message_transport::IpcQueueRaiiReaderWrapper> reader;
     };
 }

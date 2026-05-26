@@ -3,7 +3,7 @@
 #include <string>
 
 #include "messaging/SpinPolicy.h"
-#include "messaging/mpsc_ipc_queue_element_wrapper.h"
+#include "messaging/ipc_queue_element_wrapper.h"
 
 namespace message_transport {
 
@@ -33,15 +33,15 @@ namespace message_transport {
         // returned wrapper, the buffer will be committed to the queue. Only available for the 
         // single dedicated writer of this queue.
         template <CSpinPolicy WritePolicy>
-        MpscIpcQueueRaiiWriterWrapper claim_buffer(size_t size);
+        IpcQueueRaiiWriterWrapper claim_buffer(size_t size);
 
         // public API that exposes a single, non-blocking call for the consumer to poll for new messages in the queue.
         // This method will return immediately if there are no new messages available, and will return a wrapper around 
         // the message buffer if a new message is available for the consumer to read.
-        std::optional<MpscIpcQueueRaiiReaderWrapper> poll_buffer();
+        std::optional<IpcQueueRaiiReaderWrapper> poll_buffer();
 
         template <CSpinPolicy ReadPolicy>
-        MpscIpcQueueRaiiReaderWrapper read_buffer();
+        IpcQueueRaiiReaderWrapper read_buffer();
 
         void release_buffer(MessageHeader& header);
 

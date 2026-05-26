@@ -3,8 +3,8 @@
 #include <span>
 #include <queue>
 
-#include "messaging/mpsc_ipc_queue.h"
-#include "messaging/mpsc_ipc_queue_element_wrapper.h"
+#include "messaging/ipc_queue.h"
+#include "messaging/ipc_queue_element_wrapper.h"
 
 namespace archive {
     /**
@@ -15,7 +15,7 @@ namespace archive {
 
     public:
         struct ArchivePublicationParams {
-            message_transport::MpscIpcQueue::MpscQueueParameters queue_params;
+            message_transport::IpcQueue::MpscQueueParameters queue_params;
         };
         ArchivePublication(ArchivePublicationParams&& params);
 
@@ -29,7 +29,7 @@ namespace archive {
         void close();
 
     private:
-        message_transport::MpscIpcQueue queue;
-        std::deque<message_transport::MpscIpcQueueRaiiWriterWrapper> to_commit;
+        message_transport::IpcQueue queue;
+        std::deque<message_transport::IpcQueueRaiiWriterWrapper> to_commit;
     };
 }

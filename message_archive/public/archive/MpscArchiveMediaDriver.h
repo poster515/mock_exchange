@@ -3,7 +3,7 @@
 
 #include "utils/Config.h"
 
-#include "messaging/mpsc_ipc_queue.h"
+#include "messaging/ipc_queue.h"
 
 namespace archive {
     /**
@@ -31,7 +31,7 @@ namespace archive {
 
     protected:
         MpscArchiveParams params;
-        message_transport::MpscIpcQueue queue;
+        message_transport::IpcQueue queue;
 
         void process_message(std::span<const std::byte> message);
     };
