@@ -138,6 +138,8 @@ namespace message_transport {
                 WritePolicy::execute();
                 read_begin = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
                 must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
+
+                // TODO: check for slow reader here. If # readers hasn't changed in N seconds and queue is full drop their message.
             }
 
             return write_offset;

@@ -5,6 +5,10 @@
 #include <utils/Config.h>
 #include "archive/ArchiveSubscription.h"
 
+#include "sbe/generated/exchange_order/MessageHeader.h"
+#include "sbe/generated/exchange_order/NewOrderSingle.h"
+#include "sbe/generated/exchange_order/CancelOrder.h"
+
 namespace ledger {
     /**
      * This class is intended to read all the orders put in via gateways, and maintain the positions
@@ -27,5 +31,9 @@ namespace ledger {
 
     private:
         std::unique_ptr<archive::ArchiveSubscription> subscription;
+
+        void process_new_order(const exchange::order::NewOrderSingle& new_order);
+        void process_cancel_order(const exchange::order::CancelOrder& order);
+
     };
 }

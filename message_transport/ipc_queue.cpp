@@ -148,6 +148,7 @@ namespace message_transport {
         new_message_header->sequence_number = global_header->write_fields.message_count.fetch_add(1, std::memory_order_acq_rel);
         new_message_header->message_size = size;
         new_message_header->type = MessageType::NORMAL;
+        new_message_header->num_readers = global_header->read_fields.num_readers.load(std::memory_order_acquire);
 
         // spdlog::info("Claimed relative offset {} with total size {} bytes (bytes at end {}, total avail {})", rel_write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
         return IpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);

@@ -1,8 +1,5 @@
 #include "ledger/Ledger.h"
 
-#include "sbe/generated/exchange_order/MessageHeader.h"
-#include "sbe/generated/exchange_order/NewOrderSingle.h"
-
 namespace ledger {
 
     Ledger::Ledger(common::CommonComponents&& components) {
@@ -28,6 +25,11 @@ namespace ledger {
 
             switch (hdr->templateId()) {
                 case (exchange::order::NewOrderSingle::sbeTemplateId()): {
+                    process_new_order(*reinterpret_cast<const exchange::order::NewOrderSingle*>(bytes.data()));
+                    break;
+                }
+                case (exchange::order::CancelOrder::sbeTemplateId()): {
+                    process_cancel_order(*reinterpret_cast<const exchange::order::CancelOrder*>(bytes.data()));
                     break;
                 }
                 default: {
@@ -39,5 +41,17 @@ namespace ledger {
 
     void Ledger::stop() {
         // quit polling the queue
+    }
+
+    void Ledger::process_new_order(const exchange::order::NewOrderSingle& new_order) {
+        /**
+         * TODO:
+         *  - bump metrics
+         *  - cache order somewhere
+         *  - add to PnL machine
+         */
+    }
+    void Ledger::process_cancel_order(const exchange::order::CancelOrder& order) {
+
     }
 }
