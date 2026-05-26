@@ -1,6 +1,7 @@
 #pragma once
 
-#include "messaging/spmc_ipc_queue.h"
+#include "messaging/ipc_queue.h"
+#include "messaging/ipc_queue_element_wrapper.h"
 
 namespace archive {
 
@@ -25,7 +26,7 @@ namespace archive {
         void close();
 
     private:
-        message_transport::SpmcIpcQueue queue;
+        message_transport::IpcQueue queue;
         std::optional<message_transport::IpcQueueRaiiReaderWrapper> reader;
     };
 }

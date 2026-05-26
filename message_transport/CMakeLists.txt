@@ -9,7 +9,6 @@ find_package(args-parser REQUIRED)
 # Queue Library
 add_library(messaging STATIC
     ipc_queue.cpp
-    spmc_ipc_queue.cpp
 )
 
 target_include_directories(messaging PUBLIC

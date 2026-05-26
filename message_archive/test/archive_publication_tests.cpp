@@ -32,7 +32,7 @@ TEST_F(ArchivePublicationTest, PublicationCreation) {
 
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     message_transport::IpcQueue reader(
-        message_transport::IpcQueue::MpscQueueParameters{
+        message_transport::IpcQueue::IpcQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
             .is_writer = false

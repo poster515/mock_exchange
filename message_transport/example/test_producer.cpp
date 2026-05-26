@@ -5,7 +5,7 @@
 
 int main() {
     message_transport::IpcQueue queue{
-        message_transport::IpcQueue::MpscQueueParameters{
+        message_transport::IpcQueue::IpcQueueParameters{
             .file_name = "/dev/shm/queue_test",
             .queue_size = message_transport::IpcQueue::MAX_QUEUE_SIZE_BYTES,
             .is_writer = true

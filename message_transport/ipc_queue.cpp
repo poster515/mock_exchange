@@ -12,7 +12,7 @@
 
 
 namespace message_transport {
-    IpcQueue::IpcQueue(MpscQueueParameters&& params)
+    IpcQueue::IpcQueue(IpcQueueParameters&& params)
             : file_name(params.file_name)
             , queue_size_bytes(params.queue_size + sizeof(GlobalHeader)) 
             , available_queue_size_bytes(params.queue_size)

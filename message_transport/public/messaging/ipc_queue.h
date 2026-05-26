@@ -44,13 +44,13 @@ namespace message_transport {
 
         static bool is_power_of_two(size_t n) { return n != 0 && (n & (n - 1)) == 0; }
 
-        struct MpscQueueParameters {
+        struct IpcQueueParameters {
             const std::string file_name;
             size_t queue_size;
             bool is_writer {true};
         };
         
-        IpcQueue(MpscQueueParameters&& params);
+        IpcQueue(IpcQueueParameters&& params);
         ~IpcQueue();
 
         // Method to claim a buffer for writing a message to the queue. Upon destruction of the 

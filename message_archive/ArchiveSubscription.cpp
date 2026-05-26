@@ -5,7 +5,7 @@
 
 namespace archive {
     ArchiveSubscription::ArchiveSubscription(ArchiveSubscriptionParams&& params)
-        : queue(message_transport::SpmcIpcQueue::SpmcQueueParameters{
+        : queue(message_transport::IpcQueue::IpcQueueParameters{
             .file_name = params.file_name,
             .queue_size = 0,
             .is_writer = false

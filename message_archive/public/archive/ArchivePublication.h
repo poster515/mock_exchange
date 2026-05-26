@@ -15,7 +15,7 @@ namespace archive {
 
     public:
         struct ArchivePublicationParams {
-            message_transport::IpcQueue::MpscQueueParameters queue_params;
+            message_transport::IpcQueue::IpcQueueParameters queue_params;
         };
         ArchivePublication(ArchivePublicationParams&& params);
 
