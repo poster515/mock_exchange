@@ -5,12 +5,16 @@
 
 namespace archive {
     ArchiveSubscription::ArchiveSubscription(ArchiveSubscriptionParams&& params)
-        : queue(message_transport::IpcQueue::IpcQueueParameters{
+            : queue(nullptr) {
+        queue = std::make_unique<message_transport::IpcQueue>(message_transport::IpcQueue::IpcQueueParameters{
             .file_name = params.file_name,
             .queue_size = 0,
             .is_writer = false
-        }) {
+        });
+    }
 
+    ArchiveSubscription::~ArchiveSubscription() {
+        if (queue) close();
     }
  
     bool ArchiveSubscription::is_ready() const {
@@ -18,9 +22,7 @@ namespace archive {
     }
 
     void ArchiveSubscription::close() {
-    }
-
-    std::span<const std::byte> ArchiveSubscription::poll_buffer() {
-        return reader.has_value() ? reader->get_as_view<std::span<const std::byte>, std::byte>() : std::span<const std::byte>{};
+        // calls the queue destructor
+        queue.reset();
     }
 }

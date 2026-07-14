@@ -59,6 +59,11 @@ namespace message_transport {
             }
         }
 
+        void mark_as_read() {
+            // for some reason someone wants to keep this segment unread, so mark as 'released' here
+            released = true;
+        }
+
         void release() {
             queue.release_buffer(*reinterpret_cast<MessageHeader*>(wrapper.data()));
             released = true;

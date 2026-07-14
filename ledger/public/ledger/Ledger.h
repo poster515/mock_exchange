@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <sqlite3.h>
 
 #include <utils/Config.h>
 #include "archive/ArchiveSubscription.h"
@@ -8,6 +9,7 @@
 #include "sbe/generated/exchange_order/MessageHeader.h"
 #include "sbe/generated/exchange_order/NewOrderSingle.h"
 #include "sbe/generated/exchange_order/CancelOrder.h"
+#include "sbe/generated/exchange_order/ReplaceOrder.h"
 
 namespace ledger {
     /**
@@ -29,11 +31,36 @@ namespace ledger {
         void run() override final;
         void stop() override final;
 
+        // public to support testing and archive concept
+        archive::FragmentAction on_fragment(std::span<const std::byte> bytes);
+
     private:
         std::unique_ptr<archive::ArchiveSubscription> subscription;
 
-        void process_new_order(const exchange::order::NewOrderSingle& new_order);
+        void process_new_order(const exchange::order::NewOrderSingle& order);
         void process_cancel_order(const exchange::order::CancelOrder& order);
+        void process_replace_order(const exchange::order::ReplaceOrder& order);
+
+        struct ManagedDb {
+            sqlite3* db {nullptr};
+
+            ManagedDb() {
+                const int r = sqlite3_open("ledger.db", &db);
+                if (r != 0) {
+                    spdlog::error("Unable to initialize db!!");
+                    throw std::runtime_error("Unable to initialize db!!");
+                }
+            }
+
+            ~ManagedDb() {
+                const int r = sqlite3_close(db);
+                if (r != 0) {
+                    spdlog::error("Unable to close db!!");
+                }
+            }
+        };
+
+        std::unique_ptr<ManagedDb> db;
 
     };
 }
