@@ -19,6 +19,8 @@ target_link_libraries(messaging PUBLIC
     spdlog::spdlog
 )
 
+set_property(TARGET messaging PROPERTY POSITION_INDEPENDENT_CODE ON)
+
 # Unit Tests
 add_subdirectory(test)
 add_subdirectory(benchmark)
