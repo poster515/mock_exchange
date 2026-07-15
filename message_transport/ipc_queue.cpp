@@ -88,6 +88,15 @@ namespace message_transport {
     }
 
     IpcQueue::~IpcQueue() {
+        close();
+    }
+
+    void IpcQueue::close() {
+        if (fd == -1) {
+            spdlog::info("queue does not have valid file handle (already closed)?");
+            return;
+        }
+
         if (!is_writer) {
             global_header->read_fields.num_readers.fetch_sub(1);
         } else {
@@ -98,7 +107,7 @@ namespace message_transport {
         const auto num_readers = global_header->read_fields.num_readers.load(std::memory_order_seq_cst);
 
         munmap(global_header, queue_size_bytes);
-        close(fd);
+        ::close(fd);
         if (num_writers == 0) {
             if (!is_writer) {
                 spdlog::info("Reader removing file without writers");
@@ -108,6 +117,8 @@ namespace message_transport {
                 shm_unlink(file_name.c_str());
             }
         }
+
+        fd = -1;
     }
 
     size_t IpcQueue::num_readers(std::memory_order order) const {

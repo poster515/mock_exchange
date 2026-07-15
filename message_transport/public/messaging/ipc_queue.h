@@ -70,6 +70,8 @@ namespace message_transport {
 
         size_t num_readers(std::memory_order order = std::memory_order_acquire) const;
 
+        void close();
+
     private:
 
         // whether this instance is the writer or reader, used for managing the state of the

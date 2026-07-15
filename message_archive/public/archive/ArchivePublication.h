@@ -29,7 +29,7 @@ namespace archive {
         void close();
 
     private:
-        message_transport::IpcQueue queue;
+        std::unique_ptr<message_transport::IpcQueue> queue;
         std::deque<message_transport::IpcQueueRaiiWriterWrapper> to_commit;
     };
 }

@@ -7,14 +7,9 @@
 
 namespace archive {
 
-    enum class FragmentAction {
-        ABORT,
-        CONTINUE
-    };
-
-    template <typename Handler_T>
-    concept CFragmentHandler = requires(Handler_T&& policy, std::span<const std::byte> fragment) {
-        { policy.on_fragment(fragment) } -> std::convertible_to<FragmentAction>;
+    enum class FragmentAction : uint8_t {
+        CONTINUE = 0,
+        ABORT = 1
     };
 
     /**
@@ -25,8 +20,9 @@ namespace archive {
     class ArchiveSubscription {
     
     public:
+        using ConsumerCallback = std::function<uint8_t(const uint8_t*, size_t)>;
         struct ArchiveSubscriptionParams {
-            const std::string file_name;
+            message_transport::IpcQueue::IpcQueueParameters queue_params;
         };
         ArchiveSubscription(ArchiveSubscriptionParams&& params);
         ~ArchiveSubscription();
@@ -34,13 +30,17 @@ namespace archive {
         // users should poll this to determine queue health
         bool is_ready() const;
 
-        template <CFragmentHandler Handler_T>
-        void poll(Handler_T& handler) {
+        // due to the C-wrapper ABI, we cannot accept C++ functions but rather C-style function pointers.
+        // I would have preferred something that can use std::spans here but alas.
+        void poll(ConsumerCallback handler) {
             auto reader = queue->poll_buffer();
             const auto bytes = reader.has_value() ?
                 reader->get_as_view<std::span<const std::byte>, std::byte>() : std::span<const std::byte>{};
 
-            const auto code = handler.on_fragment(bytes);
+            const uint8_t* casted = reinterpret_cast<const uint8_t*>(bytes.data());
+            const size_t len = bytes.size_bytes();
+            const auto code = static_cast<FragmentAction>(handler(casted, len));
+
             switch (code) {
                 case (FragmentAction::ABORT): {
                     // need to re-mark these bytes as needing-to-read next poll

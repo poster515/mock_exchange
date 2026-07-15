@@ -7,8 +7,8 @@ namespace archive {
     ArchiveSubscription::ArchiveSubscription(ArchiveSubscriptionParams&& params)
             : queue(nullptr) {
         queue = std::make_unique<message_transport::IpcQueue>(message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = params.file_name,
-            .queue_size = 0,
+            .file_name = params.queue_params.file_name,
+            .queue_size = params.queue_params.queue_size,
             .is_writer = false
         });
     }
@@ -23,6 +23,7 @@ namespace archive {
 
     void ArchiveSubscription::close() {
         // calls the queue destructor
+        queue->close();
         queue.reset();
     }
 }

@@ -5,12 +5,12 @@
 
 namespace archive {
     ArchivePublication::ArchivePublication(ArchivePublicationParams&& params)
-        : queue(std::move(params.queue_params)) {
-
+            : queue(nullptr) {
+        queue = std::make_unique<message_transport::IpcQueue>(std::move(params.queue_params));
     }
  
     bool ArchivePublication::is_ready() const {
-        return queue.num_readers() > 0;
+        return queue->num_readers() > 0;
     }
 
     size_t ArchivePublication::uncommitted_message_count() const {
@@ -26,10 +26,11 @@ namespace archive {
 
     void ArchivePublication::close() {
         commit();
+        queue->close();
     }
 
     std::span<std::byte> ArchivePublication::claim_buffer(size_t buffer_size) {
-        to_commit.emplace_back(queue.claim_buffer<message_transport::BusyWaitPolicy>(buffer_size));
+        to_commit.emplace_back(queue->claim_buffer<message_transport::BusyWaitPolicy>(buffer_size));
         return to_commit.back().get_as_span();
     }
 }

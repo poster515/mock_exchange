@@ -8,6 +8,23 @@
 std::vector<std::reference_wrapper<common::IApplicationService>> applications;
 std::atomic_bool quit;
 
+/**
+ * 
+ * Ok I need to rethink this a bit....what am I trying to accomplish? 
+ * 
+ * I have a MPSC queue that we can leverage for all sorts of things. I was thinking
+ * of some kind of trading bot network where they all submit orders to this ledger 
+ * which does some kind of housekeeping, but I would need to implement C++ bots
+ * which wasn't really on my agenda. I was trying to make python wrappers for my C++ 
+ * code but that doesn't seem super...stable? Just unfamiliar with that tech.
+ * 
+ * SO I could:
+ * - implement C++ bots, but the alpaca API I would need doesn't exist either
+ * - implement an Alpaca C++ API
+ * - maybe pivot to some kind of file fragmentation thing? 
+ * - 
+ */
+
 void signal_handler(int signal) {
     for (auto app : applications) {
         app.get().stop();

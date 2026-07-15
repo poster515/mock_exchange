@@ -24,6 +24,8 @@ namespace ledger {
      * 
      */
     class Ledger : public common::IApplicationService {
+        static constexpr size_t QUEUE_SIZE = 1 << 16;
+
     public:
         Ledger(common::CommonComponents&& components);
 
@@ -61,6 +63,6 @@ namespace ledger {
         };
 
         std::unique_ptr<ManagedDb> db;
-
+        common::CommonComponents& common;
     };
 }

@@ -2,21 +2,31 @@
 
 namespace ledger {
 
-    Ledger::Ledger(common::CommonComponents&& components) {
+    Ledger::Ledger(common::CommonComponents&& components)
+            : common(components) {
         db = std::make_unique<ManagedDb>();
     }
 
     void Ledger::start() {
+
         // we want to spin up a poll runner and run in a worker thread.
         subscription = std::make_unique<archive::ArchiveSubscription>(
             archive::ArchiveSubscription::ArchiveSubscriptionParams {
-                .file_name = ""
+                .queue_params = message_transport::IpcQueue::IpcQueueParameters {
+                    .file_name = common.config.lookup("queue_name"),
+                    .queue_size = common.config.lookup("queue_name"),
+                    .is_writer = false
+                }
             }
         );
     }
 
     void Ledger::run() {
-        subscription->poll(*this);
+        subscription->poll([this](const uint8_t* data, size_t len) -> uint8_t {
+            const std::byte* as_bytes = reinterpret_cast<const std::byte*>(data);
+            std::span<const std::byte> s {as_bytes, len};
+            return static_cast<uint8_t>(this->on_fragment(s));
+        });
     }
 
     archive::FragmentAction Ledger::on_fragment(std::span<const std::byte> bytes) {
