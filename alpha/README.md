@@ -37,7 +37,8 @@ alpha/
 │   └── ml_agent.py
 ├── shared/
 │   ├── alpaca_client.py
-│   └── order_publisher.py
+│   └── archive_client.py
+├── market_data_bot.py
 └── README.md
 ```
 

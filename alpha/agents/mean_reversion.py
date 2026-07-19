@@ -54,7 +54,7 @@ class MeanReversionClient:
         Initialize the mean reversion client.
 
         Args:
-            market_data_client: MarketDataAlpacaClient reference for polling data
+            market_data_subscription: ArchiveSubscription for polling data (written by separate service)
             archive_publication: ArchivePublication for SBE order submission
             symbol: Trading symbol
             params: MeanReversionParams configuration

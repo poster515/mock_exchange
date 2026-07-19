@@ -92,6 +92,11 @@ namespace message_transport {
     }
 
     void IpcQueue::close() {
+
+        // TODO: this is a really vulnerable design. If a reader drops its process/subscription,
+        // all unread messages will wedge the writer(s) when they eventually wrap around again.
+        // We need some kind of 'reconciliation' process when a reader drops.
+
         if (fd == -1) {
             spdlog::info("queue does not have valid file handle (already closed)?");
             return;
@@ -99,6 +104,10 @@ namespace message_transport {
 
         if (!is_writer) {
             global_header->read_fields.num_readers.fetch_sub(1);
+            // // decrement the read responsibility for all messages up to the latest claimed buffer position
+            // const auto abs_write_offset = global_header->write_fields.write_offset.load(std::memory_order_acquire);
+            // const auto abs_read_offset = global_header->read_fields.read_offset.load(std::memory_order_acquire);
+            // decrement_readers_until(abs_read_offset, abs_write_offset);
         } else {
             global_header->write_fields.num_writers.fetch_sub(1);
         }
@@ -119,6 +128,15 @@ namespace message_transport {
         }
 
         fd = -1;
+    }
+
+    void IpcQueue::decrement_readers_until(const size_t abs_read_offset, const size_t abs_write_offset) {
+        // while (abs_read_offset < abs_write_offset) {
+        //     const auto rel_write_offset = abs_write_offset % available_queue_size_bytes;
+        //     void* new_buffer_ptr = static_cast<void*>(reinterpret_cast<uint8_t*>(global_header) + rel_write_offset + sizeof(GlobalHeader));
+        //     auto& new_message_header = *static_cast<MessageHeader*>(new_buffer_ptr);
+        //     release_buffer(new_message_header);
+        // }
     }
 
     size_t IpcQueue::num_readers(std::memory_order order) const {
@@ -203,7 +221,7 @@ namespace message_transport {
     void IpcQueue::release_buffer(MessageHeader& header) {
         
         // if all readers haven't processed, then return
-        if (header.num_readers.fetch_sub(1, std::memory_order_acquire) > 1)
+        if (header.num_readers.fetch_sub(1, std::memory_order_acq_rel) > 1)
             return;
 
         // clear the message body so its not interpreted weird if it's on a boundary next wrap around

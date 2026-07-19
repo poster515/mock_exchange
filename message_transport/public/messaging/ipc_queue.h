@@ -24,11 +24,11 @@ namespace message_transport {
     static_assert(std::atomic<uint64_t>::is_always_lock_free);
 
     /**
-     * This class implements a multi-producer, single-consumer (MPSC) inter-process communication (IPC) queue.
+     * This class implements a multi-producer, multi-consumer (MPMC) inter-process communication (IPC) queue.
      * 
      * It provides a thread-safe mechanism for multiple producers to send messages to one consumer across process boundaries.
      * 
-     * This class supports arbitrary message sizes and handles synchronization internally to ensure safe communication between the producer(s) and consumer.
+     * This class supports arbitrary message sizes and handles synchronization internally to ensure safe communication between the producer(s) and consumer(s).
      * 
      * The implementation uses shared memory and synchronization primitives to achieve efficient communication without busy-waiting.
      * If a callback is provided, a new thread will be spawned which constantly polls the buffer. See consumer.cpp for an example.
@@ -99,6 +99,8 @@ namespace message_transport {
         bool read_buffer();
 
         void insert_skip_message(const uint64_t skip_offset);
+
+        void decrement_readers_until(const size_t abs_read_offset, const size_t abs_write_offset);
 
         template <CSpinPolicy WritePolicy>
         inline uint64_t wait_for_next_write_offset(const size_t total_size_with_header) {

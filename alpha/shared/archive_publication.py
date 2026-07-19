@@ -1,5 +1,6 @@
 import ctypes
-import os, time
+import os
+
 
 class ArchivePublication:
     def __init__(self):
@@ -19,7 +20,13 @@ class ArchivePublication:
         print(self.archive_lib.archive_pub_close)
         print(self.archive_lib.archive_pub_destroy)
 
+    def __del__(self):
+        self.publication_close()
+
     def publication_open(self, shm_name: str, shm_size: int):
+        # first close any open publication we may already have
+        self.publication_close()
+
         file_name = os.path.join("tmp", shm_name)
         self.publication_handle = self.archive_lib.archive_pub_create(file_name.encode("utf-8"), shm_size)
         print(f"python: got new handle {self.publication_handle}")
@@ -31,6 +38,9 @@ class ArchivePublication:
         return self.archive_lib.archive_pub_is_ready(self.publication_handle)
     
     def publication_close(self):
+        if self.publication_handle is None:
+            return
+
         self.archive_lib.archive_pub_close(self.publication_handle)
         self.archive_lib.archive_pub_destroy(self.publication_handle)
     
