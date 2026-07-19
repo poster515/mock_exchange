@@ -84,6 +84,7 @@ namespace message_transport {
         // memory and ensure that messages do not exceed the queue capacity.
         size_t queue_size_bytes;
         size_t available_queue_size_bytes;
+        std::optional<size_t> read_offset;
 
         // grab and/or set the state of the shared memory region
         message_transport::GlobalHeader* global_header;
@@ -100,7 +101,7 @@ namespace message_transport {
 
         void insert_skip_message(const uint64_t skip_offset);
 
-        void decrement_readers_until(const size_t abs_read_offset, const size_t abs_write_offset);
+        void decrement_readers_until();
 
         template <CSpinPolicy WritePolicy>
         inline uint64_t wait_for_next_write_offset(const size_t total_size_with_header) {
@@ -134,14 +135,14 @@ namespace message_transport {
                 }
             } while(!global_header->write_fields.write_offset.compare_exchange_weak(write_offset, next_write_offset, std::memory_order_release, std::memory_order_relaxed));
 
-            // now we have a write location claimed. May have to spin if the reader hasn't caught up yet.
-            auto read_begin = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
-            bool must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
+            // now we have a write location claimed. May have to spin if the slowest reader hasn't caught up yet.
+            auto slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
+            bool must_wait = (next_write_offset - slowest_reader) >= available_queue_size_bytes;
 
             while (must_wait) {
                 WritePolicy::execute();
-                read_begin = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
-                must_wait = (next_write_offset - read_begin) > available_queue_size_bytes;
+                slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
+                must_wait = (next_write_offset - slowest_reader) >= available_queue_size_bytes;
 
                 // TODO: check for slow reader here. If # readers hasn't changed in N seconds and queue is full drop their message.
             }
