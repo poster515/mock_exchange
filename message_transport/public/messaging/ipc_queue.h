@@ -33,10 +33,32 @@ namespace message_transport {
      * The implementation uses shared memory and synchronization primitives to achieve efficient communication without busy-waiting.
      * If a callback is provided, a new thread will be spawned which constantly polls the buffer. See consumer.cpp for an example.
      * 
+     * Needs at least one writer and one reader otherwise the shared memory file is unlinked at the OS level. We could stall writers until a
+     * new reader joins but that requires maintaining more atomic state that adds overhead and increases race condition surface.
+     * 
      * TODO: This implementation could benefit from a "hot swap" clean buffer/dirty buffer paradigm. Probably not a huge deal
      * to leave as is for now but its something worth investigating at some point.
      */
     class IpcQueue {
+        struct UnpackedReadersAndWriterOffset {
+
+            size_t num_readers { 0 };
+            uint64_t write_offset { 0 };
+            uint64_t original_value { 0 };
+
+            UnpackedReadersAndWriterOffset(uint64_t value) { unwrap(value); }
+
+            UnpackedReadersAndWriterOffset& unwrap(uint64_t value) {
+                original_value = value;
+                num_readers =   value       & 0x00000000000000FF;  // bits 0-7
+                write_offset = (value >> 8) & 0x00FFFFFFFFFFFFFF;  // bits 8-63
+                return *this;
+            }
+            // DO NOT MODIFY ORIGINAL_VALUE (Seems obvious but still)
+            uint64_t return_add_reader() { return (++num_readers & 0x00000000000000FF) | ((write_offset << 8) & 0xFFFFFFFFFFFFFF00); }
+            uint64_t return_sub_reader() { return (--num_readers & 0x00000000000000FF) | ((write_offset << 8) & 0xFFFFFFFFFFFFFF00); }
+            uint64_t return_add_offset(uint64_t message_size) { return (num_readers & 0x00000000000000FF) | (((write_offset += message_size) << 8) & 0xFFFFFFFFFFFFFF00); }
+        };
     public:
         static constexpr uint32_t MAGIC = 0xDEADBEEF;
         static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
@@ -67,9 +89,9 @@ namespace message_transport {
         IpcQueueRaiiReaderWrapper read_buffer();
 
         void release_buffer(MessageHeader& header);
+        void commit_buffer(MessageHeader& header);
 
         size_t num_readers(std::memory_order order = std::memory_order_acquire) const;
-
         void close();
 
     private:
@@ -84,7 +106,7 @@ namespace message_transport {
         // memory and ensure that messages do not exceed the queue capacity.
         size_t queue_size_bytes;
         size_t available_queue_size_bytes;
-        std::optional<size_t> read_offset;
+        uint64_t abs_read_offset;
 
         // grab and/or set the state of the shared memory region
         message_transport::GlobalHeader* global_header;
@@ -101,7 +123,8 @@ namespace message_transport {
 
         void insert_skip_message(const uint64_t skip_offset);
 
-        void decrement_readers_until();
+        void decrement_readers_until(uint64_t abs_write_offset);
+        UnpackedReadersAndWriterOffset modify_readers(bool new_reader);
 
         template <CSpinPolicy WritePolicy>
         inline uint64_t wait_for_next_write_offset(const size_t total_size_with_header) {
@@ -114,40 +137,31 @@ namespace message_transport {
              * 
              * The biggest challenge here is really just making sure we're not lapping the reader.
              */
-            
-            auto write_offset = global_header->write_fields.write_offset.load(std::memory_order_relaxed);
-
-            size_t bytes_remaining_at_end {0};
-            uint64_t rel_write_offset {0};
-            uint64_t next_write_offset {0};
+            uint64_t desired { 0 };
+            uint64_t current { 0 };
+            UnpackedReadersAndWriterOffset wrapper { 0 };
 
             do {
-                rel_write_offset = write_offset % available_queue_size_bytes;
-                bytes_remaining_at_end = available_queue_size_bytes - rel_write_offset;
-                
-                if ((total_size_with_header + sizeof(MessageHeader)) <= bytes_remaining_at_end) {
-                    // if we can fit our message plus another MessageHeader, cool! Try to claim.
-                    next_write_offset = write_offset + total_size_with_header;
-                } else {
-                    // otherwise, try to bump the next_write_offset to the beginning of the queue.
-                    // We'll handle the skip message insertion later.
-                    next_write_offset = write_offset + bytes_remaining_at_end;
-                }
-            } while(!global_header->write_fields.write_offset.compare_exchange_weak(write_offset, next_write_offset, std::memory_order_release, std::memory_order_relaxed));
+                current = global_header->write_fields.readers_and_write_offset.load(std::memory_order_relaxed);
+                wrapper.unwrap(current);
+                const size_t bytes_remaining_at_end = available_queue_size_bytes - (wrapper.write_offset % available_queue_size_bytes);
+                const size_t bytes_to_bump = (total_size_with_header + sizeof(MessageHeader)) <= bytes_remaining_at_end ? total_size_with_header : bytes_remaining_at_end;
+                desired = wrapper.return_add_offset(bytes_to_bump);
+            } while(!global_header->write_fields.readers_and_write_offset.compare_exchange_weak(current, desired, std::memory_order_release, std::memory_order_relaxed));
 
             // now we have a write location claimed. May have to spin if the slowest reader hasn't caught up yet.
             auto slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
-            bool must_wait = (next_write_offset - slowest_reader) >= available_queue_size_bytes;
+            bool must_wait = (wrapper.write_offset - slowest_reader) >= available_queue_size_bytes;
 
             while (must_wait) {
                 WritePolicy::execute();
                 slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
-                must_wait = (next_write_offset - slowest_reader) >= available_queue_size_bytes;
+                must_wait = (wrapper.write_offset - slowest_reader) >= available_queue_size_bytes;
 
                 // TODO: check for slow reader here. If # readers hasn't changed in N seconds and queue is full drop their message.
             }
 
-            return write_offset;
+            return wrapper.write_offset;
         }
     };
 }
