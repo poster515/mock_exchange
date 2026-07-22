@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 import json
 
-from alpha.shared.archive_client import ArchivePublication, ArchiveSubscription
+from alpha.shared.archive_publication import ArchivePublication, ArchiveSubscription
 
 # SBE Schema Definition
 MARKET_DATA_SCHEMA = {
