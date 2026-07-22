@@ -179,7 +179,7 @@ namespace message_transport {
 
         // we may have claimed a spot at the end of the buffer that needs a skip message instead. Check, insert, and try again.
         if ((total_message_len + sizeof(MessageHeader)) > bytes_remaining_at_end) {
-            insert_skip_message(rel_write_offset);
+            insert_skip_message(rel_write_offset, wrapper.num_readers);
             return claim_buffer<WritePolicy>(size);
         }
 
@@ -236,8 +236,10 @@ namespace message_transport {
         const auto total_message_len = header.message_size + sizeof(MessageHeader);
         abs_read_offset += static_cast<size_t>(total_message_len);
 
+        const auto prev_count = header.num_readers.fetch_sub(1, std::memory_order_seq_cst);
+
         // if all readers haven't processed, then return
-        if (header.num_readers.fetch_sub(1, std::memory_order_seq_cst) > 1) {
+        if (prev_count > 1) {
             spdlog::info("Message #{} not read by all consumers, returning", header.sequence_number);
             return;
         }
@@ -251,7 +253,7 @@ namespace message_transport {
         header.sequence_number = 0;
         header.type = MessageType::NORMAL;
         header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
-        const auto abs_read_offset = global_header->read_fields.read_offset.fetch_add(total_message_len, std::memory_order_acq_rel);
+        global_header->read_fields.read_offset.fetch_add(total_message_len, std::memory_order_acq_rel);
     }
 
     void IpcQueue::commit_buffer(MessageHeader& header) {
@@ -269,7 +271,7 @@ namespace message_transport {
         }
     }
 
-    void IpcQueue::insert_skip_message(const uint64_t skip_offset) {
+    void IpcQueue::insert_skip_message(const uint64_t skip_offset, const size_t num_readers) {
         const auto padding_size = available_queue_size_bytes - skip_offset - sizeof(MessageHeader);
 
         // same flow as regular producer: header -> payload -> commit
@@ -277,6 +279,7 @@ namespace message_transport {
         message_header->sequence_number = 0;
         message_header->message_size = padding_size;
         message_header->type = MessageType::PADDING;
+        message_header->num_readers.store(num_readers, std::memory_order_release);
 
         auto* message_payload = static_cast<void*>(message_header + sizeof(MessageHeader));
         std::memset(message_payload, 0, padding_size);

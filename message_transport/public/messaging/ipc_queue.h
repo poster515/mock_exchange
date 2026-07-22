@@ -121,7 +121,7 @@ namespace message_transport {
         // returns whether the queue should continue to poll or not.
         bool read_buffer();
 
-        void insert_skip_message(const uint64_t skip_offset);
+        void insert_skip_message(const uint64_t skip_offset, const size_t num_readers);
 
         void decrement_readers_until(uint64_t abs_write_offset);
         UnpackedReadersAndWriterOffset modify_readers(bool new_reader);
