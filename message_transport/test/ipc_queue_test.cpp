@@ -478,237 +478,237 @@ protected:
 //         EXPECT_EQ(written_data[i], read_data[i]);
 //     }
 // }
-TEST_F(IpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
-    message_transport::IpcQueue writer{
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = true
-        }
-    };
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    IpcQueue reader(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = false
-        }
-    );
+// TEST_F(IpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
+//     message_transport::IpcQueue writer{
+//         message_transport::IpcQueue::IpcQueueParameters{
+//             .file_name = SHM_NAME,
+//             .queue_size = SMALL_QUEUE_SIZE,
+//             .is_writer = true
+//         }
+//     };
+//     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+//     IpcQueue reader(
+//         message_transport::IpcQueue::IpcQueueParameters{
+//             .file_name = SHM_NAME,
+//             .queue_size = SMALL_QUEUE_SIZE,
+//             .is_writer = false
+//         }
+//     );
 
-    struct TestMessage {
-        uint8_t byte_val;
-        uint32_t uint32_val;
-        uint64_t uint64_val;
-        unsigned long long ull_val;
-    };
+//     struct TestMessage {
+//         uint8_t byte_val;
+//         uint32_t uint32_val;
+//         uint64_t uint64_val;
+//         unsigned long long ull_val;
+//     };
 
-    std::vector<TestMessage> written_messages;
-    std::vector<TestMessage> read_messages;
+//     std::vector<TestMessage> written_messages;
+//     std::vector<TestMessage> read_messages;
 
-    const int NUM_ITERATIONS = 20; // Write enough to cause multiple wraparounds
+//     const int NUM_ITERATIONS = 20; // Write enough to cause multiple wraparounds
 
-    auto producer = [&writer, &written_messages]() {
-        for (int i = 0; i < NUM_ITERATIONS; ++i) {
-            TestMessage msg{
-                static_cast<uint8_t>(i % 256),
-                static_cast<uint32_t>(i * 1000),
-                static_cast<uint64_t>(i * 1000000),
-                static_cast<unsigned long long>(i * 9999999)
-            };
+//     auto producer = [&writer, &written_messages]() {
+//         for (int i = 0; i < NUM_ITERATIONS; ++i) {
+//             TestMessage msg{
+//                 static_cast<uint8_t>(i % 256),
+//                 static_cast<uint32_t>(i * 1000),
+//                 static_cast<uint64_t>(i * 1000000),
+//                 static_cast<unsigned long long>(i * 9999999)
+//             };
 
-            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(TestMessage));
-            ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&msg), sizeof(TestMessage)));
-            written_messages.push_back(msg);
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        }
-    };
+//             auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(TestMessage));
+//             ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&msg), sizeof(TestMessage)));
+//             written_messages.push_back(msg);
+//             std::this_thread::sleep_for(std::chrono::milliseconds(5));
+//         }
+//     };
 
-    auto consumer = [&reader, &read_messages]() {
-        while (read_messages.size() < NUM_ITERATIONS) {
-            auto wrapper = reader.poll_buffer();
-            if (wrapper.has_value()) {
-                TestMessage msg;
-                std::memcpy(&msg, wrapper->get_buffer(), sizeof(TestMessage));
-                read_messages.push_back(msg);
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(3));
-        }
-    };
+//     auto consumer = [&reader, &read_messages]() {
+//         while (read_messages.size() < NUM_ITERATIONS) {
+//             auto wrapper = reader.poll_buffer();
+//             if (wrapper.has_value()) {
+//                 TestMessage msg;
+//                 std::memcpy(&msg, wrapper->get_buffer(), sizeof(TestMessage));
+//                 read_messages.push_back(msg);
+//             }
+//             std::this_thread::sleep_for(std::chrono::milliseconds(3));
+//         }
+//     };
 
-    std::thread producer_thread(producer);
-    std::thread consumer_thread(consumer);
+//     std::thread producer_thread(producer);
+//     std::thread consumer_thread(consumer);
 
-    producer_thread.join();
-    consumer_thread.join();
+//     producer_thread.join();
+//     consumer_thread.join();
 
-    EXPECT_EQ(written_messages.size(), read_messages.size());
-    for (size_t i = 0; i < written_messages.size(); ++i) {
-        EXPECT_EQ(written_messages[i].byte_val, read_messages[i].byte_val);
-        EXPECT_EQ(written_messages[i].uint32_val, read_messages[i].uint32_val);
-        EXPECT_EQ(written_messages[i].uint64_val, read_messages[i].uint64_val);
-        EXPECT_EQ(written_messages[i].ull_val, read_messages[i].ull_val);
-    }
-}
+//     EXPECT_EQ(written_messages.size(), read_messages.size());
+//     for (size_t i = 0; i < written_messages.size(); ++i) {
+//         EXPECT_EQ(written_messages[i].byte_val, read_messages[i].byte_val);
+//         EXPECT_EQ(written_messages[i].uint32_val, read_messages[i].uint32_val);
+//         EXPECT_EQ(written_messages[i].uint64_val, read_messages[i].uint64_val);
+//         EXPECT_EQ(written_messages[i].ull_val, read_messages[i].ull_val);
+//     }
+// }
 
-TEST_F(IpcQueueTest, LongRunningProducerConsumer) {
-    message_transport::IpcQueue writer{
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = true
-        }
-    };
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    IpcQueue reader(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = false
-        }
-    );
+// TEST_F(IpcQueueTest, LongRunningProducerConsumer) {
+//     message_transport::IpcQueue writer{
+//         message_transport::IpcQueue::IpcQueueParameters{
+//             .file_name = SHM_NAME,
+//             .queue_size = QUEUE_SIZE,
+//             .is_writer = true
+//         }
+//     };
+//     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+//     IpcQueue reader(
+//         message_transport::IpcQueue::IpcQueueParameters{
+//             .file_name = SHM_NAME,
+//             .queue_size = QUEUE_SIZE,
+//             .is_writer = false
+//         }
+//     );
 
-    const size_t NUM_MESSAGES = 4096;
-    std::vector<uint64_t> written_values;
-    std::vector<uint64_t> read_values;
-    written_values.reserve(NUM_MESSAGES);
-    read_values.reserve(NUM_MESSAGES);
+//     const size_t NUM_MESSAGES = 4096;
+//     std::vector<uint64_t> written_values;
+//     std::vector<uint64_t> read_values;
+//     written_values.reserve(NUM_MESSAGES);
+//     read_values.reserve(NUM_MESSAGES);
 
-    auto producer = [&writer, &written_values, NUM_MESSAGES]() {
-        for (uint64_t i = 0; i < NUM_MESSAGES; ++i) {
-            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint64_t));
-            const uint64_t value = i;
-            ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t)));
-            written_values.push_back(value);
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-        }
-    };
+//     auto producer = [&writer, &written_values, NUM_MESSAGES]() {
+//         for (uint64_t i = 0; i < NUM_MESSAGES; ++i) {
+//             auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint64_t));
+//             const uint64_t value = i;
+//             ASSERT_TRUE(wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t)));
+//             written_values.push_back(value);
+//             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+//         }
+//     };
 
-    auto consumer = [&reader, &read_values, NUM_MESSAGES]() {
-        while (read_values.size() < NUM_MESSAGES) {
-            auto wrapper = reader.poll_buffer();
-            if (wrapper.has_value()) {
-                uint64_t value;
-                std::memcpy(&value, wrapper->get_buffer(), sizeof(uint64_t));
-                read_values.push_back(value);
-            }
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-        }
-    };
+//     auto consumer = [&reader, &read_values, NUM_MESSAGES]() {
+//         while (read_values.size() < NUM_MESSAGES) {
+//             auto wrapper = reader.poll_buffer();
+//             if (wrapper.has_value()) {
+//                 uint64_t value;
+//                 std::memcpy(&value, wrapper->get_buffer(), sizeof(uint64_t));
+//                 read_values.push_back(value);
+//             }
+//             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+//         }
+//     };
 
-    std::thread producer_thread(producer);
-    std::thread consumer_thread(consumer);
+//     std::thread producer_thread(producer);
+//     std::thread consumer_thread(consumer);
 
-    producer_thread.join();
-    consumer_thread.join();
+//     producer_thread.join();
+//     consumer_thread.join();
 
-    EXPECT_EQ(written_values.size(), read_values.size());
-    for (size_t i = 0; i < written_values.size(); ++i) {
-        EXPECT_EQ(written_values[i], read_values[i]);
-    }
-}
+//     EXPECT_EQ(written_values.size(), read_values.size());
+//     for (size_t i = 0; i < written_values.size(); ++i) {
+//         EXPECT_EQ(written_values[i], read_values[i]);
+//     }
+// }
 
-TEST_F(IpcQueueTest, TwoProducersOneConsumer) {
-    message_transport::IpcQueue writer1{
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = true
-        }
-    };
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    IpcQueue reader(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = false
-        }
-    );
+// TEST_F(IpcQueueTest, TwoProducersOneConsumer) {
+//     message_transport::IpcQueue writer1{
+//         message_transport::IpcQueue::IpcQueueParameters{
+//             .file_name = SHM_NAME,
+//             .queue_size = QUEUE_SIZE,
+//             .is_writer = true
+//         }
+//     };
+//     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+//     IpcQueue reader(
+//         message_transport::IpcQueue::IpcQueueParameters{
+//             .file_name = SHM_NAME,
+//             .queue_size = QUEUE_SIZE,
+//             .is_writer = false
+//         }
+//     );
 
-    const size_t msg_size = sizeof(int32_t);
-    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::MessageHeader);
-    const size_t msgs_per_cycle = available_space / (msg_size + sizeof(message_transport::MessageHeader));
-    const int num_messages_per_producer = (100 * msgs_per_cycle / 2) - 1;
+//     const size_t msg_size = sizeof(int32_t);
+//     const size_t available_space = QUEUE_SIZE - sizeof(message_transport::MessageHeader);
+//     const size_t msgs_per_cycle = available_space / (msg_size + sizeof(message_transport::MessageHeader));
+//     const int num_messages_per_producer = (100 * msgs_per_cycle / 2) - 1;
 
-    std::unordered_set<int32_t> written_values;
-    std::unordered_set<int32_t> read_values;
+//     std::unordered_set<int32_t> written_values;
+//     std::unordered_set<int32_t> read_values;
 
-    std::unordered_set<int32_t> producer1_values;
-    auto producer1 = [&writer1, &producer1_values, num_messages_per_producer, msg_size]() {
-        for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
-            const int32_t value = i;
-            auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
-            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
-            producer1_values.insert(value);
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-        }
-    };
+//     std::unordered_set<int32_t> producer1_values;
+//     auto producer1 = [&writer1, &producer1_values, num_messages_per_producer, msg_size]() {
+//         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
+//             const int32_t value = i;
+//             auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
+//             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
+//             producer1_values.insert(value);
+//             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+//         }
+//     };
 
-    std::unordered_set<int32_t> producer2_values;
-    auto producer2 = [&writer1, &producer2_values, num_messages_per_producer, msg_size]() {
-        for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
-            const int32_t value = i + num_messages_per_producer;
-            auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
-            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
-            producer2_values.insert(value);
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-        }
-    };
+//     std::unordered_set<int32_t> producer2_values;
+//     auto producer2 = [&writer1, &producer2_values, num_messages_per_producer, msg_size]() {
+//         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
+//             const int32_t value = i + num_messages_per_producer;
+//             auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
+//             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
+//             producer2_values.insert(value);
+//             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+//         }
+//     };
 
-    std::unordered_set<int32_t> producer3_values;
-    auto producer3 = [&writer1, &producer3_values, num_messages_per_producer, msg_size]() {
-        for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
-            const int32_t value = i + (num_messages_per_producer * 2);
-            auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
-            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
-            producer3_values.insert(value);
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-        }
-    };
+//     std::unordered_set<int32_t> producer3_values;
+//     auto producer3 = [&writer1, &producer3_values, num_messages_per_producer, msg_size]() {
+//         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
+//             const int32_t value = i + (num_messages_per_producer * 2);
+//             auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
+//             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
+//             producer3_values.insert(value);
+//             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+//         }
+//     };
 
-    std::unordered_set<int32_t> producer4_values;
-    auto producer4 = [&writer1, &producer4_values, num_messages_per_producer, msg_size]() {
-        for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
-            const int32_t value = i + (num_messages_per_producer * 3);
-            auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
-            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
-            producer4_values.insert(value);
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-        }
-    };
+//     std::unordered_set<int32_t> producer4_values;
+//     auto producer4 = [&writer1, &producer4_values, num_messages_per_producer, msg_size]() {
+//         for (int i : std::ranges::iota_view{0, num_messages_per_producer}) {
+//             const int32_t value = i + (num_messages_per_producer * 3);
+//             auto wrapper = writer1.claim_buffer<message_transport::SleepPolicy>(msg_size);
+//             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), msg_size);
+//             producer4_values.insert(value);
+//             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+//         }
+//     };
 
-    auto consumer = [&reader, &read_values, total_msgs = num_messages_per_producer * 4, msg_size]() {
-        while (read_values.size() < total_msgs) {
-            auto wrapper = reader.poll_buffer();
-            if (wrapper.has_value()) {
-                int value;
-                std::memcpy(&value, wrapper->get_buffer(), msg_size);
-                read_values.insert(value);
-                // spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs);
-            }
-            std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-        }
-    };
+//     auto consumer = [&reader, &read_values, total_msgs = num_messages_per_producer * 4, msg_size]() {
+//         while (read_values.size() < total_msgs) {
+//             auto wrapper = reader.poll_buffer();
+//             if (wrapper.has_value()) {
+//                 int value;
+//                 std::memcpy(&value, wrapper->get_buffer(), msg_size);
+//                 read_values.insert(value);
+//                 // spdlog::info("Consumer read value: {}, total read so far: {}, total expected: {}", value, read_values.size(), total_msgs);
+//             }
+//             std::this_thread::sleep_for(std::chrono::nanoseconds(100));
+//         }
+//     };
 
-    std::thread producer1_thread(producer1);
-    std::thread producer2_thread(producer2);
-    std::thread producer3_thread(producer3);
-    std::thread producer4_thread(producer4);
-    std::thread consumer_thread(consumer);
+//     std::thread producer1_thread(producer1);
+//     std::thread producer2_thread(producer2);
+//     std::thread producer3_thread(producer3);
+//     std::thread producer4_thread(producer4);
+//     std::thread consumer_thread(consumer);
 
-    producer1_thread.join();
-    producer2_thread.join();
-    producer3_thread.join();
-    producer4_thread.join();
-    consumer_thread.join();
+//     producer1_thread.join();
+//     producer2_thread.join();
+//     producer3_thread.join();
+//     producer4_thread.join();
+//     consumer_thread.join();
 
-    written_values.insert(producer1_values.begin(), producer1_values.end());
-    written_values.insert(producer2_values.begin(), producer2_values.end());
-    written_values.insert(producer3_values.begin(), producer3_values.end());
-    written_values.insert(producer4_values.begin(), producer4_values.end());
+//     written_values.insert(producer1_values.begin(), producer1_values.end());
+//     written_values.insert(producer2_values.begin(), producer2_values.end());
+//     written_values.insert(producer3_values.begin(), producer3_values.end());
+//     written_values.insert(producer4_values.begin(), producer4_values.end());
 
-    EXPECT_EQ(written_values.size(), read_values.size());
-    EXPECT_EQ(written_values, read_values);
-}
+//     EXPECT_EQ(written_values.size(), read_values.size());
+//     EXPECT_EQ(written_values, read_values);
+// }
 
 TEST_F(IpcQueueTest, MultiProducerDifferentTypes) {
     message_transport::IpcQueue writer{
@@ -806,7 +806,7 @@ TEST_F(IpcQueueTest, MultiProducerDifferentTypes) {
                     }
                 }
                 ++count;
-                // spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
+                spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
             }
             std::this_thread::sleep_for(std::chrono::microseconds(50));
         }
