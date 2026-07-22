@@ -193,7 +193,7 @@ namespace message_transport {
         new_message_header->type = MessageType::NORMAL;
         new_message_header->num_readers.store(wrapper.num_readers, std::memory_order_release);
 
-        // spdlog::info("Claimed relative offset {} with total size {} bytes (bytes at end {}, total avail {})", rel_write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
+        spdlog::info("Claimed relative offset {} with total size {} bytes (bytes at end {}, total avail {})", rel_write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
         return IpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
     }
 
@@ -215,13 +215,13 @@ namespace message_transport {
 
                 if (message_header->type == MessageType::PADDING) {
                     // if this is a padding message, we need to skip it and move the read offset to the next message after the padding message.
-                    // spdlog::info("Polled skip message at offset {} with size {}, bytes (total size with header: {} bytes), skipping to beginning of queue", rel_read_offset, message_header->message_size, total_message_len);
+                    spdlog::info("Polled skip message at offset {} with size {}, bytes (total size with header: {} bytes), skipping to beginning of queue", rel_read_offset, message_header->message_size, total_message_len);
                     release_buffer(*message_header);
                     return poll_buffer();
                 }
 
                 // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
-                // spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", rel_read_offset, message_header->message_size, total_message_len);
+                spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", rel_read_offset, message_header->message_size, total_message_len);
                 return IpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
             }
             case CommitFlag::NOT_READY:

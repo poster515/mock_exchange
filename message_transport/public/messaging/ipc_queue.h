@@ -151,12 +151,12 @@ namespace message_transport {
 
             // now we have a write location claimed. May have to spin if the slowest reader hasn't caught up yet.
             auto slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
-            bool must_wait = (wrapper.write_offset - slowest_reader) >= available_queue_size_bytes;
+            bool must_wait = (wrapper.write_offset - slowest_reader) > available_queue_size_bytes;
 
             while (must_wait) {
                 WritePolicy::execute();
                 slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
-                must_wait = (wrapper.write_offset - slowest_reader) >= available_queue_size_bytes;
+                must_wait = (wrapper.write_offset - slowest_reader) > available_queue_size_bytes;
 
                 // TODO: check for slow reader here. If # readers hasn't changed in N seconds and queue is full drop their message.
             }
