@@ -117,7 +117,7 @@ namespace message_transport {
         UnpackedReadersAndWriterOffset wrapper (global_header->write_fields.readers_and_write_offset.load(std::memory_order_acquire));
 
         if (!is_writer) {
-            wrapper = modify_readers(!is_writer);
+            wrapper = modify_readers(false);
             decrement_readers_until(wrapper.write_offset);
         } else {
             global_header->write_fields.num_writers.fetch_sub(1);
@@ -173,8 +173,8 @@ namespace message_transport {
         const auto total_message_len = size + sizeof(MessageHeader);
 
         // first we claim the next write location, no matter what. Also waits for any slow reader
-        const auto abs_write_offset = wait_for_next_write_offset<WritePolicy>(total_message_len);
-        const auto rel_write_offset = abs_write_offset % available_queue_size_bytes;
+        const auto wrapper = wait_for_next_write_offset<WritePolicy>(total_message_len);
+        const auto rel_write_offset = wrapper.write_offset % available_queue_size_bytes;
         const auto bytes_remaining_at_end = available_queue_size_bytes - rel_write_offset;
 
         // we may have claimed a spot at the end of the buffer that needs a skip message instead. Check, insert, and try again.
@@ -191,6 +191,7 @@ namespace message_transport {
         new_message_header->sequence_number = global_header->write_fields.message_count.fetch_add(1, std::memory_order_acq_rel);
         new_message_header->message_size = size;
         new_message_header->type = MessageType::NORMAL;
+        new_message_header->num_readers.store(wrapper.num_readers, std::memory_order_release);
 
         // spdlog::info("Claimed relative offset {} with total size {} bytes (bytes at end {}, total avail {})", rel_write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
         return IpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
@@ -254,7 +255,6 @@ namespace message_transport {
     }
 
     void IpcQueue::commit_buffer(MessageHeader& header) {
-        header.num_readers.store(global_header->read_fields.num_readers.load(std::memory_order_acquire), std::memory_order_release);
         header.commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
     }
 

@@ -14,7 +14,6 @@ namespace message_transport {
 
     struct ReadFields {
         std::atomic<uint64_t> read_offset;  // unscaled offset from the end of the global header of the raw mapped memory region, to the oldest unread message.
-        std::atomic<uint32_t> num_readers;  // number of readers at the time of commit, decremented by each reader as they release it
     };
 
     template <typename T, size_t N> requires (N >= sizeof(T))

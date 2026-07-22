@@ -127,7 +127,7 @@ namespace message_transport {
         UnpackedReadersAndWriterOffset modify_readers(bool new_reader);
 
         template <CSpinPolicy WritePolicy>
-        inline uint64_t wait_for_next_write_offset(const size_t total_size_with_header) {
+        inline UnpackedReadersAndWriterOffset wait_for_next_write_offset(const size_t total_size_with_header) {
 
             /**
              * This is a critical piece of code - basically writers must come here when the attempt to claim
@@ -150,6 +150,7 @@ namespace message_transport {
             } while(!global_header->write_fields.readers_and_write_offset.compare_exchange_weak(current, desired, std::memory_order_release, std::memory_order_relaxed));
 
             // now we have a write location claimed. May have to spin if the slowest reader hasn't caught up yet.
+            wrapper.unwrap(current); // rewrap the claimed position/reader count otherwise we'd be returning new info.
             auto slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
             bool must_wait = (wrapper.write_offset - slowest_reader) >= available_queue_size_bytes;
 
@@ -161,7 +162,7 @@ namespace message_transport {
                 // TODO: check for slow reader here. If # readers hasn't changed in N seconds and queue is full drop their message.
             }
 
-            return wrapper.write_offset;
+            return wrapper;
         }
     };
 }

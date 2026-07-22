@@ -20,7 +20,7 @@ protected:
     static constexpr size_t SMALL_QUEUE_SIZE = 128;
 
     void SetUp() override {
-        // shm_unlink(SHM_NAME);
+        shm_unlink(SHM_NAME);
     }
 
     void TearDown() override {
@@ -49,7 +49,6 @@ TEST_F(IpcQueueTest, BasicWriteAndRead) {
 
     auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(test_data.size());
     ASSERT_TRUE(wrapper.write_to_buffer(test_data.data(), test_data.size()));
-    wrapper.~IpcQueueRaiiWriterWrapper(); // explicitly call the destructor to commit the message to the queue
 
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
