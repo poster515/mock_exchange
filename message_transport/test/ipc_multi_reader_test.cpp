@@ -224,3 +224,201 @@ TEST_F(IpcQueueMultiReaderTest, BasicQueueWrapping) {
         EXPECT_EQ(read_data2, message);
     }
 }
+
+
+TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
+    message_transport::IpcQueue writer{
+        message_transport::IpcQueue::IpcQueueParameters{
+            .file_name = SHM_NAME,
+            .queue_size = QUEUE_SIZE,
+            .is_writer = true
+        }
+    };
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    IpcQueue reader1(
+        message_transport::IpcQueue::IpcQueueParameters{
+            .file_name = SHM_NAME,
+            .queue_size = QUEUE_SIZE,
+            .is_writer = false
+        }
+    );
+
+    IpcQueue reader2(
+        message_transport::IpcQueue::IpcQueueParameters{
+            .file_name = SHM_NAME,
+            .queue_size = QUEUE_SIZE,
+            .is_writer = false
+        }
+    );
+
+    const int NUM_MESSAGES = 50000;
+    std::unordered_set<uint64_t> written_values;
+
+    std::unordered_set<uint8_t> uint8_values;
+    auto byte_producer = [&writer, &uint8_values, NUM_MESSAGES]() {
+        for (int i = 1; i <= NUM_MESSAGES; ++i) {
+            const uint8_t value = static_cast<uint8_t>(i);
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint8_t));
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint8_t));
+            uint8_values.insert(value);
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    };
+
+    std::unordered_set<uint32_t> uint32_values;
+    auto uint32_producer = [&writer, &uint32_values, NUM_MESSAGES]() {
+        for (int i = 1; i <= NUM_MESSAGES; ++i) {
+            const uint32_t value = static_cast<uint32_t>(i + NUM_MESSAGES);
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint32_t));
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint32_t));
+            uint32_values.insert(value);
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    };
+
+    std::unordered_set<uint64_t> uint64_values;
+    auto uint64_producer = [&writer, &uint64_values, NUM_MESSAGES]() {
+        for (int i = 1; i <= NUM_MESSAGES; ++i) {
+            const uint64_t value = static_cast<uint64_t>(i + (NUM_MESSAGES * 2));
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint64_t));
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t));
+            uint64_values.insert(value);
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    };
+
+    std::unordered_set<std::string> written_strings;
+    auto str_producer = [&writer, &written_strings, NUM_MESSAGES]() {
+        for (int i = 1; i <= NUM_MESSAGES; ++i) {
+            const auto msg = std::format("Hello #{}!!!!", i);
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(msg.size());
+            wrapper.write_to_buffer(msg.c_str(), msg.size());
+            written_strings.insert(msg);
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    };
+
+    std::unordered_set<std::string> reader1_strings, reader2_strings;
+    std::unordered_set<uint64_t> reader1_values, reader2_values;
+    auto consumer1 = [&reader1, &reader1_values, &reader1_strings, total_msgs = NUM_MESSAGES * 4]() {
+        size_t count = 0;
+        while (count < total_msgs) {
+            auto wrapper = reader1.poll_buffer();
+            if (wrapper.has_value()) {
+                switch (wrapper->get_payload_size()) {
+                    case sizeof(uint8_t): {
+                        uint8_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint8_t));
+                        reader1_values.insert(static_cast<uint64_t>(value));
+                        break;
+                    }
+                    case sizeof(uint32_t): {
+                        uint32_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint32_t));
+                        reader1_values.insert(static_cast<uint64_t>(value));
+                        break;
+                    }
+                    case sizeof(uint64_t): {
+                        uint64_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint64_t));
+                        reader1_values.insert(value);
+                        break;
+                    }
+                    default :{
+                        reader1_strings.insert(std::string(wrapper->get_as_view<std::string_view>()));
+                        break;
+                    }
+                }
+                ++count;
+                // spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
+        }
+    };
+
+    auto consumer2 = [&reader2, &reader2_values, &reader2_strings, total_msgs = NUM_MESSAGES * 4]() {
+        size_t count = 0;
+        while (count < total_msgs) {
+            auto wrapper = reader2.poll_buffer();
+            if (wrapper.has_value()) {
+                switch (wrapper->get_payload_size()) {
+                    case sizeof(uint8_t): {
+                        uint8_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint8_t));
+                        reader2_values.insert(static_cast<uint64_t>(value));
+                        break;
+                    }
+                    case sizeof(uint32_t): {
+                        uint32_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint32_t));
+                        reader2_values.insert(static_cast<uint64_t>(value));
+                        break;
+                    }
+                    case sizeof(uint64_t): {
+                        uint64_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint64_t));
+                        reader2_values.insert(value);
+                        break;
+                    }
+                    default :{
+                        reader2_strings.insert(std::string(wrapper->get_as_view<std::string_view>()));
+                        break;
+                    }
+                }
+                ++count;
+                // spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
+        }
+    };
+
+    std::thread byte_thread(byte_producer);
+    std::thread uint32_thread(uint32_producer);
+    std::thread uint64_thread(uint64_producer);
+    std::thread str_thread(str_producer);
+    std::thread consumer_thread1(consumer1);
+    std::thread consumer_thread2(consumer2);
+
+    byte_thread.join();
+    uint32_thread.join();
+    uint64_thread.join();
+    str_thread.join();
+    consumer_thread1.join();
+    consumer_thread2.join();
+
+    written_values.insert(uint8_values.begin(), uint8_values.end());
+    written_values.insert(uint32_values.begin(), uint32_values.end());
+    written_values.insert(uint64_values.begin(), uint64_values.end());
+
+    EXPECT_EQ(written_values.size(), reader1_values.size());
+    EXPECT_EQ(written_values, reader1_values);
+    EXPECT_EQ(written_values.size(), reader2_values.size());
+    EXPECT_EQ(written_values, reader2_values);
+
+    EXPECT_EQ(written_strings.size(), reader1_strings.size());
+    EXPECT_EQ(written_strings, reader1_strings);
+    EXPECT_EQ(written_strings.size(), reader2_strings.size());
+    EXPECT_EQ(written_strings, reader2_strings);
+
+    // std::unordered_set<uint64_t> outer_join;
+    // std::set_symmetric_difference(
+    //     written_values.begin(), written_values.end(),
+    //     read_values.begin(), read_values.end(),
+    //     std::inserter(outer_join, outer_join.begin())
+    // );
+
+    // if (!outer_join.empty()) {
+    //     std::cout << "Outer join (values in one set but not both):\n";
+    //     for (const auto& value : outer_join) {
+    //         std::cout << "  " << value;
+    //         if (written_values.count(value)) {
+    //             std::cout << " (written only)";
+    //         } else {
+    //             std::cout << " (read only)";
+    //         }
+    //         std::cout << "\n";
+    //     }
+    // } else {
+    //     std::cout << "No differences found - sets are identical\n";
+    // }
+}
