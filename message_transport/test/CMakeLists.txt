@@ -11,8 +11,6 @@ find_package(GTest REQUIRED CONFIG)
 
 # Add test executable
 add_executable(message_transport_tests
-    # Add your test source files here
-    # example: test_example.cpp
     ipc_queue_test.cpp
 )
 
@@ -28,3 +26,22 @@ enable_testing()
 
 add_test(NAME MessageTransportTests COMMAND message_transport_tests)
 set_tests_properties(MessageTransportTests PROPERTIES TIMEOUT 60)
+
+
+# Add test executable
+add_executable(multi_reader_message_transport_tests
+    ipc_multi_reader_test.cpp
+)
+
+# Link against gtest and main library
+target_link_libraries(multi_reader_message_transport_tests
+    messaging
+    GTest::gtest
+    GTest::gtest_main
+)
+
+# Enable testing
+enable_testing()
+
+add_test(NAME MultiReaderMessageTransportTests COMMAND multi_reader_message_transport_tests)
+set_tests_properties(MultiReaderMessageTransportTests PROPERTIES TIMEOUT 60)
