@@ -478,6 +478,7 @@ TEST_F(IpcQueueTest, LargeMessageSequence) {
         EXPECT_EQ(written_data[i], read_data[i]);
     }
 }
+
 TEST_F(IpcQueueTest, VariousSizedMessagesWithMultipleWraparounds) {
     message_transport::IpcQueue writer{
         message_transport::IpcQueue::IpcQueueParameters{
