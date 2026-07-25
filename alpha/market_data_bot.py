@@ -3,7 +3,8 @@ from typing import List, Optional
 from datetime import datetime
 import json
 
-from alpha.shared.archive_publication import ArchivePublication, ArchiveSubscription
+from alpha.shared.archive_publication import ArchivePublication
+from alpha.shared.archive_subscription import ArchiveSubscription
 
 # SBE Schema Definition
 MARKET_DATA_SCHEMA = {
@@ -39,8 +40,15 @@ class MarketDataClient:
     def start(self):
         self.md_subscription = ArchiveSubscription()
         self.md_publication = ArchivePublication()
+
+    def run(self):
+        self._fetch_and_publish()
+        self._read_ledger_orders()
+
+    def _read_ledger_orders(self):
+        pass
     
-    def query_market_data(self, symbols: List[str]) -> Optional[dict]:
+    def _query_market_data(self, symbols: List[str]) -> Optional[dict]:
         """
         Query Alpaca market data API for given symbols.
         
@@ -59,7 +67,7 @@ class MarketDataClient:
         market_data = {}
         return market_data
     
-    def serialize_market_data(self, symbol: str, price: float, 
+    def _serialize_market_data(self, symbol: str, price: float, 
                             volume: int, bid: float, ask: float) -> bytes:
         """
         Serialize market data using SBE schema.
@@ -85,7 +93,7 @@ class MarketDataClient:
         # TODO: Implement SBE serialization (use sbe-python or similar)
         return json.dumps(data).encode()
     
-    def publish_market_data(self, symbol: str, price: float,
+    def _publish_market_data(self, symbol: str, price: float,
                            volume: int, bid: float, ask: float) -> bool:
         """
         Publish market data to archive.
@@ -104,7 +112,7 @@ class MarketDataClient:
             self.logger.error("No publisher configured")
             return False
         
-        serialized = self.serialize_market_data(symbol, price, volume, bid, ask)
+        serialized = self._serialize_market_data(symbol, price, volume, bid, ask)
         
         try:
             self.publisher.publish("market_data", serialized)
@@ -114,14 +122,14 @@ class MarketDataClient:
             self.logger.error(f"Failed to publish: {e}")
             return False
     
-    def fetch_and_publish(self, symbols: List[str]) -> None:
+    def _fetch_and_publish(self, symbols: List[str]) -> None:
         """
         Fetch market data and publish to archive.
         
         Args:
             symbols: List of stock symbols to fetch
         """
-        market_data = self.query_market_data(symbols)
+        market_data = self._query_market_data(symbols)
         
         if market_data:
             for symbol in symbols:

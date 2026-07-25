@@ -1,12 +1,18 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
-from alpha.shared.archive_publication import ArchivePublication, ArchiveSubscription
+from alpha.shared.archive_publication import ArchivePublication
+from alpha.shared.archive_subscription import ArchiveSubscription
 
 class AlpacaAgent(ABC):
     """Generic base class for Alpaca trading agents."""
     
     def __init__(self, ledger, data_source):
+        self.order_publication = None
+        self.md_ctrl_subscription = None
+        self.md_subscription = None
+
+    def start(self):
         self.order_publication = ArchivePublication()
         self.md_ctrl_subscription = ArchivePublication()
         self.md_subscription = ArchiveSubscription()
