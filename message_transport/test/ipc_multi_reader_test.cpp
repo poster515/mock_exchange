@@ -6,6 +6,7 @@
 #include <cstring>
 #include <ranges>
 #include <unordered_set>
+#include <future>
 #include <sys/mman.h>
 
 #include "messaging/ipc_queue.h"
@@ -155,6 +156,96 @@ TEST_F(IpcQueueMultiReaderTest, ProducerBlocksWhenQueueFull) {
     int final_value;
     std::memcpy(&final_value, final_read->get_buffer(), sizeof(int));
     EXPECT_EQ(final_value, 999);
+}
+
+TEST_F(IpcQueueMultiReaderTest, MultipleJoinReaders) {
+    message_transport::IpcQueue writer{
+        message_transport::IpcQueue::IpcQueueParameters{
+            .file_name = SHM_NAME,
+            .queue_size = QUEUE_SIZE,
+            .is_writer = true
+        }
+    };
+
+    const size_t msg_size = 64;
+    const size_t available_space = QUEUE_SIZE - sizeof(message_transport::MessageHeader);
+    const int num_messages_to_fill = available_space / (msg_size + sizeof(message_transport::MessageHeader));
+
+    std::vector<int> written_values;
+    std::atomic<bool> stop(false);
+    std::atomic<bool> writer_stopped(false);
+
+    std::thread producer ([&stop, &writer, &written_values, &writer_stopped]() {
+        int value = 1;
+        while (!stop) {
+            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(msg_size);
+            wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(int));
+            written_values.push_back(value++);
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        writer_stopped = true;
+    });
+
+    static constexpr int NUM_THREADS = 4;
+    std::vector<std::thread> threads;
+    std::vector<std::future<std::vector<int>>> futures;
+    for (int i : std::ranges::iota_view{0, NUM_THREADS}) {
+        
+        std::promise<std::vector<int>> promise;
+        futures.push_back(promise.get_future());
+        auto func = [&writer_stopped](std::promise<std::vector<int>>&& promise){
+            std::vector<int> values;
+            IpcQueue reader(
+                message_transport::IpcQueue::IpcQueueParameters{
+                    .file_name = SHM_NAME,
+                    .queue_size = QUEUE_SIZE,
+                    .is_writer = false
+                }
+            );
+
+            while (true) {
+                auto read_wrapper = reader.poll_buffer();
+                if (!read_wrapper.has_value()) {
+                    if (writer_stopped) break;
+                    else continue;
+                }
+                int v;
+                std::memcpy(&v, read_wrapper->get_buffer(), sizeof(int));
+                read_wrapper->release();
+                values.push_back(v);
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+
+            promise.set_value(values);
+        };
+
+        threads.push_back(std::thread(func, std::move(promise)));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    // let these guys run for a bit
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+    stop = true;
+    if (producer.joinable()) producer.join();
+    for (auto& t : threads) { if (t.joinable()) t.join(); }
+
+    std::vector<std::vector<int>> results;
+    for (auto& f : futures) { results.push_back(f.get()); }
+
+    auto start_view = results | std::views::transform([](const std::vector<int>& h) { return h.empty() ? -1 : h.front(); });
+    const auto start_values = std::unordered_set<int>(start_view.begin(), start_view.end());
+
+    auto end_view = results | std::views::transform([](const std::vector<int>& h) { return h.empty() ? -1 : h.back(); });
+    const auto end_values = std::unordered_set<int>(end_view.begin(), end_view.end());
+
+    EXPECT_FALSE(start_values.contains(-1));
+    EXPECT_FALSE(end_values.contains(-1));
+
+    EXPECT_TRUE(start_values.size() == NUM_THREADS);
+    EXPECT_TRUE(end_values.size() == 1);
 }
 
 

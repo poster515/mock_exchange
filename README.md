@@ -13,7 +13,7 @@ A modular, testable market microstructure implementation with gateways, sequence
 - **Sequencer**: Centralizes order stream with deterministic ordering
 - **Matching Engine**: Executes trades with configurable matching rules
 - **Market Data Gateway**: Distributes trades, quotes, and market snapshots
-- **Message Transport**: SPSC IPC queue layer (MPSC roadmap)
+- **Message Transport**: MPMC IPC queue layer (MPMC roadmap)
 
 ### Process Communication
 

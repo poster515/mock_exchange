@@ -54,6 +54,7 @@ namespace message_transport {
         uint64_t current { 0 };
         UnpackedReadersAndWriterOffset wrapper { 0 };
         do {
+            // TODO: add bounds checking here - should never decrement past 0 and never add more than max readers
             current = global_header->write_fields.readers_and_write_offset.load(std::memory_order_relaxed);
             desired = add_new_reader ? wrapper.unwrap(current).return_add_reader() : wrapper.unwrap(current).return_sub_reader();
         } while (!global_header->write_fields.readers_and_write_offset.compare_exchange_weak(current, desired));
