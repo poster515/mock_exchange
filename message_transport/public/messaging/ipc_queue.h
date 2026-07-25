@@ -40,6 +40,11 @@ namespace message_transport {
      * to leave as is for now but its something worth investigating at some point.
      */
     class IpcQueue {
+    public:
+        static constexpr uint32_t MAGIC = 0xDEADBEEF;
+        static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
+        static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
+
         struct UnpackedReadersAndWriterOffset {
 
             size_t num_readers { 0 };
@@ -59,10 +64,6 @@ namespace message_transport {
             uint64_t return_sub_reader() { return (--num_readers & 0x00000000000000FF) | ((write_offset << 8) & 0xFFFFFFFFFFFFFF00); }
             uint64_t return_add_offset(uint64_t message_size) { return (num_readers & 0x00000000000000FF) | (((write_offset += message_size) << 8) & 0xFFFFFFFFFFFFFF00); }
         };
-    public:
-        static constexpr uint32_t MAGIC = 0xDEADBEEF;
-        static const size_t MAX_QUEUE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
-        static constexpr auto DEFAULT_WRITER_TIMEOUT = 1us;
 
         static bool is_power_of_two(size_t n) { return n != 0 && (n & (n - 1)) == 0; }
 
@@ -70,6 +71,7 @@ namespace message_transport {
             const std::string file_name;
             size_t queue_size;
             bool is_writer {true};
+            std::string agent_name { "" };
         };
         
         IpcQueue(IpcQueueParameters&& params);
@@ -101,6 +103,7 @@ namespace message_transport {
         // not super happy with this, but it'll help do some stupid sanity checks on startup.
         bool is_writer;
         const std::string file_name;
+        const std::string agent_name;
 
         // the total size of the queue in bytes, which will be used to manage the shared 
         // memory and ensure that messages do not exceed the queue capacity.
@@ -150,12 +153,12 @@ namespace message_transport {
             } while(!global_header->write_fields.readers_and_write_offset.compare_exchange_weak(current, desired, std::memory_order_release, std::memory_order_relaxed));
 
             // now we have a write location claimed. May have to spin if the slowest reader hasn't caught up yet.
-            auto slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
+            auto slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_acquire);
             bool must_wait = (wrapper.write_offset - slowest_reader) > available_queue_size_bytes;
 
             while (must_wait) {
                 WritePolicy::execute();
-                slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
+                slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_acquire);
                 must_wait = (wrapper.write_offset - slowest_reader) > available_queue_size_bytes;
 
                 // TODO: check for slow reader here. If # readers hasn't changed in N seconds and queue is full drop their message.

@@ -31,6 +31,7 @@ set_tests_properties(MessageTransportTests PROPERTIES TIMEOUT 60)
 # Add test executable
 add_executable(multi_reader_message_transport_tests
     ipc_multi_reader_test.cpp
+    ipc_offset_calc_tests.cpp
 )
 
 # Link against gtest and main library

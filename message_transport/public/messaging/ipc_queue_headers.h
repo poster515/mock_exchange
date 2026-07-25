@@ -14,6 +14,7 @@ namespace message_transport {
 
     struct ReadFields {
         std::atomic<uint64_t> read_offset;  // unscaled offset from the end of the global header of the raw mapped memory region, to the oldest unread message.
+        uint64_t last_read_seq_num;         // seq num of the last fully read message
     };
 
     template <typename T, size_t N> requires (N >= sizeof(T))
@@ -40,8 +41,8 @@ namespace message_transport {
     static_assert(sizeof(GlobalHeader) == 192, "sizeof(GlobalHeader) is not 192");
 
     enum class MessageType : uint32_t {
-        NORMAL = 0x00,
-        PADDING = 0x01 // used as bookend
+        NORMAL = 0x0000,
+        PADDING = 0x0001 // used as bookend
     };
 
     enum class CommitFlag : uint8_t {

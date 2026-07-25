@@ -807,7 +807,7 @@ TEST_F(IpcQueueTest, MultiProducerDifferentTypes) {
                     }
                 }
                 ++count;
-                spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
+                // spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
             }
             std::this_thread::sleep_for(std::chrono::microseconds(50));
         }

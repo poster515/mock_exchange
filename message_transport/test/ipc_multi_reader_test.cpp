@@ -239,7 +239,8 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
         message_transport::IpcQueue::IpcQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false
+            .is_writer = false,
+            .agent_name = "reader1"
         }
     );
 
@@ -247,7 +248,8 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
         message_transport::IpcQueue::IpcQueueParameters{
             .file_name = SHM_NAME,
             .queue_size = QUEUE_SIZE,
-            .is_writer = false
+            .is_writer = false,
+            .agent_name = "reader2"
         }
     );
 
@@ -330,6 +332,7 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
                     }
                 }
                 ++count;
+                wrapper->release();
                 // spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
             }
             std::this_thread::sleep_for(std::chrono::microseconds(50));
@@ -366,6 +369,7 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
                     }
                 }
                 ++count;
+                wrapper->release();
                 // spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
             }
             std::this_thread::sleep_for(std::chrono::microseconds(50));
