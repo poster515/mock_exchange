@@ -178,7 +178,8 @@ TEST_F(IpcQueueMultiReaderTest, MultipleJoinReaders) {
     std::thread producer ([&stop, &writer, &written_values, &writer_stopped]() {
         int value = 1;
         while (!stop) {
-            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(msg_size);
+            while (writer.num_readers() == 0) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+            auto wrapper = writer.claim_buffer<message_transport::HybridPolicy>(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(int));
             written_values.push_back(value++);
 
@@ -194,13 +195,14 @@ TEST_F(IpcQueueMultiReaderTest, MultipleJoinReaders) {
         
         std::promise<std::vector<int>> promise;
         futures.push_back(promise.get_future());
-        auto func = [&writer_stopped](std::promise<std::vector<int>>&& promise){
+        auto func = [&writer_stopped, &i](std::promise<std::vector<int>>&& promise){
             std::vector<int> values;
             IpcQueue reader(
                 message_transport::IpcQueue::IpcQueueParameters{
                     .file_name = SHM_NAME,
                     .queue_size = QUEUE_SIZE,
-                    .is_writer = false
+                    .is_writer = false,
+                    .agent_name = std::format("reader{}", i)
                 }
             );
 
@@ -208,7 +210,10 @@ TEST_F(IpcQueueMultiReaderTest, MultipleJoinReaders) {
                 auto read_wrapper = reader.poll_buffer();
                 if (!read_wrapper.has_value()) {
                     if (writer_stopped) break;
-                    else continue;
+                    else {
+                        std::this_thread::sleep_for(std::chrono::microseconds(10));
+                        continue;
+                    }
                 }
                 int v;
                 std::memcpy(&v, read_wrapper->get_buffer(), sizeof(int));

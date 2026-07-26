@@ -31,7 +31,7 @@ namespace message_transport {
     };
 
     struct SleepPolicy {
-        static constexpr auto DEFAULT_TIMEOUT_NS = std::chrono::nanoseconds(50);
+        static constexpr auto DEFAULT_TIMEOUT_NS = std::chrono::nanoseconds(100);
         static void execute() noexcept {
             std::this_thread::sleep_for(DEFAULT_TIMEOUT_NS);
         }
