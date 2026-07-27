@@ -27,75 +27,51 @@ protected:
     void TearDown() override {
         // shm_unlink(SHM_NAME);
     }
+    
+    std::unique_ptr<message_transport::IpcQueue> generate_agent(std::string_view name, bool is_writer, size_t queue_size = QUEUE_SIZE) {
+        return std::make_unique<message_transport::IpcQueue>(
+            message_transport::IpcQueue::IpcQueueParameters{
+                .file_name = SHM_NAME,
+                .queue_size = queue_size,
+                .is_writer = is_writer,
+                .agent_name = std::string(name)
+            }
+        );
+    }
 };
 
 TEST_F(IpcQueueMultiReaderTest, BasicWriteAndRead) {
-    message_transport::IpcQueue writer{
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = true
-        }
-    };
+    auto writer = generate_agent("writer1", true);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    IpcQueue reader1(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = false
-        }
-    );
-    IpcQueue reader2(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = false
-        }
-    );
+
+    auto reader1 = generate_agent("reader1", false);
+    auto reader2 = generate_agent("reader2", false);
 
     std::string_view test_data = "Hello, World!";
 
-    auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(test_data.size());
+    auto wrapper = writer->claim_buffer<message_transport::SleepPolicy>(test_data.size());
     ASSERT_TRUE(wrapper.write_to_buffer(test_data.data(), test_data.size()));
     wrapper.~IpcQueueRaiiWriterWrapper(); // explicitly call the destructor to commit the message to the queue
 
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-    auto read_wrapper1 = reader1.poll_buffer();
+    auto read_wrapper1 = reader1->poll_buffer();
     ASSERT_TRUE(read_wrapper1.has_value());
     auto read_data1 = read_wrapper1->get_as_view<std::string_view>();
     EXPECT_EQ(read_data1, test_data);
 
-    auto read_wrapper2 = reader2.poll_buffer();
+    auto read_wrapper2 = reader2->poll_buffer();
     ASSERT_TRUE(read_wrapper2.has_value());
     auto read_data2 = read_wrapper2->get_as_view<std::string_view>();
     EXPECT_EQ(read_data2, test_data);
 }
 
 TEST_F(IpcQueueMultiReaderTest, ProducerBlocksWhenQueueFull) {
-    message_transport::IpcQueue writer{
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = true
-        }
-    };
+    auto writer = generate_agent("writer1", true);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    IpcQueue reader1(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = false
-        }
-    );
 
-    IpcQueue reader2(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = false
-        }
-    );
+    auto reader1 = generate_agent("reader1", false);
+    auto reader2 = generate_agent("reader2", false);
 
     const size_t msg_size = 64;
     const size_t available_space = QUEUE_SIZE - sizeof(message_transport::MessageHeader);
@@ -106,7 +82,7 @@ TEST_F(IpcQueueMultiReaderTest, ProducerBlocksWhenQueueFull) {
 
     // Fill the queue
     for (int i : std::ranges::iota_view{0, num_messages_to_fill}) {
-        auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(msg_size);
+        auto wrapper = writer->claim_buffer<message_transport::SleepPolicy>(msg_size);
         int value { i };
         wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(int));
         written_values.push_back(value);
@@ -116,7 +92,7 @@ TEST_F(IpcQueueMultiReaderTest, ProducerBlocksWhenQueueFull) {
     std::thread producer([&writer, &producer_blocked, msg_size]() {
         producer_blocked.store(true, std::memory_order_release);
         int value = 999;
-        auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(msg_size);
+        auto wrapper = writer->claim_buffer<message_transport::SleepPolicy>(msg_size);
         wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(int));
         producer_blocked.store(false, std::memory_order_release);
     });
@@ -126,7 +102,7 @@ TEST_F(IpcQueueMultiReaderTest, ProducerBlocksWhenQueueFull) {
 
     // Read messages one by one to free up space
     for (int i : std::ranges::iota_view{0, num_messages_to_fill}) {
-        auto read_wrapper = reader1.poll_buffer();
+        auto read_wrapper = reader1->poll_buffer();
         ASSERT_TRUE(read_wrapper.has_value());
         int value;
         std::memcpy(&value, read_wrapper->get_buffer(), sizeof(int));
@@ -139,7 +115,7 @@ TEST_F(IpcQueueMultiReaderTest, ProducerBlocksWhenQueueFull) {
             EXPECT_TRUE(producer_blocked.load(std::memory_order_acquire));
         }
 
-        auto read_wrapper2 = reader2.poll_buffer();
+        auto read_wrapper2 = reader2->poll_buffer();
         ASSERT_TRUE(read_wrapper2.has_value());
         read_wrapper2->release();
     }
@@ -151,7 +127,7 @@ TEST_F(IpcQueueMultiReaderTest, ProducerBlocksWhenQueueFull) {
     producer.join();
 
     // Verify the last message from producer
-    auto final_read = reader1.poll_buffer();
+    auto final_read = reader1->poll_buffer();
     ASSERT_TRUE(final_read.has_value());
     int final_value;
     std::memcpy(&final_value, final_read->get_buffer(), sizeof(int));
@@ -159,13 +135,7 @@ TEST_F(IpcQueueMultiReaderTest, ProducerBlocksWhenQueueFull) {
 }
 
 TEST_F(IpcQueueMultiReaderTest, MultipleJoinReaders) {
-    message_transport::IpcQueue writer{
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = true
-        }
-    };
+    auto writer = generate_agent("writer1", true);
 
     const size_t msg_size = 64;
     const size_t available_space = QUEUE_SIZE - sizeof(message_transport::MessageHeader);
@@ -178,8 +148,8 @@ TEST_F(IpcQueueMultiReaderTest, MultipleJoinReaders) {
     std::thread producer ([&stop, &writer, &written_values, &writer_stopped]() {
         int value = 1;
         while (!stop) {
-            while (writer.num_readers() == 0) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
-            auto wrapper = writer.claim_buffer<message_transport::HybridPolicy>(msg_size);
+            while (writer->num_readers() == 0) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+            auto wrapper = writer->claim_buffer<message_transport::HybridPolicy>(msg_size);
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(int));
             written_values.push_back(value++);
 
@@ -195,19 +165,12 @@ TEST_F(IpcQueueMultiReaderTest, MultipleJoinReaders) {
         
         std::promise<std::vector<int>> promise;
         futures.push_back(promise.get_future());
-        auto func = [&writer_stopped, &i](std::promise<std::vector<int>>&& promise){
+        auto func = [&writer_stopped, &i, this](std::promise<std::vector<int>>&& promise){
             std::vector<int> values;
-            IpcQueue reader(
-                message_transport::IpcQueue::IpcQueueParameters{
-                    .file_name = SHM_NAME,
-                    .queue_size = QUEUE_SIZE,
-                    .is_writer = false,
-                    .agent_name = std::format("reader{}", i)
-                }
-            );
 
+            auto reader = generate_agent(std::format("reader{}", i), false);
             while (true) {
-                auto read_wrapper = reader.poll_buffer();
+                auto read_wrapper = reader->poll_buffer();
                 if (!read_wrapper.has_value()) {
                     if (writer_stopped) break;
                     else {
@@ -255,47 +218,30 @@ TEST_F(IpcQueueMultiReaderTest, MultipleJoinReaders) {
 
 
 TEST_F(IpcQueueMultiReaderTest, BasicQueueWrapping) {
-    message_transport::IpcQueue writer{
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = true
-        }
-    };
+    auto writer = generate_agent("writer1", true, SMALL_QUEUE_SIZE);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    IpcQueue reader1(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = false
-        }
-    );
-    IpcQueue reader2(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = SMALL_QUEUE_SIZE,
-            .is_writer = false
-        }
-    );
+
+    auto reader1 = generate_agent("reader1", false, SMALL_QUEUE_SIZE);
+    auto reader2 = generate_agent("reader2", false, SMALL_QUEUE_SIZE);
 
     std::string_view message = "this_is_a_long_message";
     const auto iters_to_fill_buffer = (SMALL_QUEUE_SIZE - sizeof(message_transport::MessageHeader)) / (message.size() + sizeof(message_transport::MessageHeader));
 
     for (auto i = 0; i < iters_to_fill_buffer; ++i) {
-        auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(message.size());
+        auto wrapper = writer->claim_buffer<message_transport::SleepPolicy>(message.size());
         ASSERT_TRUE(wrapper.write_to_buffer(message.data(), message.size()));
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
     // now the queue is full and we want to make sure the wrapping works correctly
     // need to consume one message though to free up enough space for a new message at the front
-    auto read_wrapper = reader1.poll_buffer();
+    auto read_wrapper = reader1->poll_buffer();
     ASSERT_TRUE(read_wrapper.has_value());
     auto read_data = read_wrapper->get_as_view<std::string_view>();
     EXPECT_EQ(read_data, message);
     read_wrapper->release(); // have to manually release (or destroy) here.
 
-    auto read_wrapper2 = reader2.poll_buffer();
+    auto read_wrapper2 = reader2->poll_buffer();
     ASSERT_TRUE(read_wrapper2.has_value());
     auto read_data2 = read_wrapper2->get_as_view<std::string_view>();
     EXPECT_EQ(read_data2, message);
@@ -303,18 +249,18 @@ TEST_F(IpcQueueMultiReaderTest, BasicQueueWrapping) {
 
     // now we can write one more message which should wrap around to the beginning of the queue
     {
-        auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(message.size());
+        auto wrapper = writer->claim_buffer<message_transport::SleepPolicy>(message.size());
         ASSERT_TRUE(wrapper.write_to_buffer(message.data(), message.size()));
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
     // anddddd then read everything we can
-    while (auto read_wrapper = reader1.poll_buffer()) {
+    while (auto read_wrapper = reader1->poll_buffer()) {
         ASSERT_TRUE(read_wrapper.has_value());
         auto read_data = read_wrapper->get_as_view<std::string_view>();
         EXPECT_EQ(read_data, message);
 
-        auto read_wrapper2 = reader2.poll_buffer();
+        auto read_wrapper2 = reader2->poll_buffer();
         ASSERT_TRUE(read_wrapper2.has_value());
         auto read_data2 = read_wrapper2->get_as_view<std::string_view>();
         EXPECT_EQ(read_data2, message);
@@ -322,32 +268,45 @@ TEST_F(IpcQueueMultiReaderTest, BasicQueueWrapping) {
 }
 
 
-TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
-    message_transport::IpcQueue writer{
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = true
-        }
-    };
+TEST_F(IpcQueueMultiReaderTest, BasicReaderJoinAndLeave) {
+    auto writer = generate_agent("writer1", true);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    IpcQueue reader1(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .agent_name = "reader1"
-        }
-    );
 
-    IpcQueue reader2(
-        message_transport::IpcQueue::IpcQueueParameters{
-            .file_name = SHM_NAME,
-            .queue_size = QUEUE_SIZE,
-            .is_writer = false,
-            .agent_name = "reader2"
-        }
-    );
+    // join reader 1 at start without any messages
+    auto reader1 = generate_agent("reader1", false);
+
+    // write single message and join reader 2
+    static constexpr const char* msg_format = "hello #{}";
+    const std::string message0 = std::format(msg_format, 0);
+    auto wrapper = writer->claim_buffer<message_transport::SleepPolicy>(message0.size());
+    ASSERT_TRUE(wrapper.write_to_buffer(message0.data(), message0.size()));
+    auto reader2 = generate_agent("reader2", false);
+
+    auto read_wrapper = reader1->poll_buffer();
+    ASSERT_TRUE(read_wrapper.has_value());
+    auto read_data = read_wrapper->get_as_view<std::string_view>();
+
+    // write another message now and start polling reader2
+    const std::string message1 = std::format(msg_format, 1);
+    auto wrapper1 = writer->claim_buffer<message_transport::SleepPolicy>(message1.size());
+    ASSERT_TRUE(wrapper1.write_to_buffer(message1.data(), message1.size()));
+    auto read_wrapper2 = reader2->poll_buffer();
+    ASSERT_TRUE(read_wrapper2.has_value());
+    auto read_data2 = read_wrapper2->get_as_view<std::string_view>();
+
+    EXPECT_TRUE(read_data == "hello #0");
+    EXPECT_TRUE(read_data2 == "hello #1");
+
+    // TODO: leave the queue and validate that that works correctly
+}
+
+
+TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
+    auto writer = generate_agent("writer1", true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    auto reader1 = generate_agent("reader1", false);
+    auto reader2 = generate_agent("reader2", false);
 
     const int NUM_MESSAGES = 50000;
     std::unordered_set<uint64_t> written_values;
@@ -356,7 +315,7 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
     auto byte_producer = [&writer, &uint8_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const uint8_t value = static_cast<uint8_t>(i);
-            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint8_t));
+            auto wrapper = writer->claim_buffer<message_transport::SleepPolicy>(sizeof(uint8_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint8_t));
             uint8_values.insert(value);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -367,7 +326,7 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
     auto uint32_producer = [&writer, &uint32_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const uint32_t value = static_cast<uint32_t>(i + NUM_MESSAGES);
-            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint32_t));
+            auto wrapper = writer->claim_buffer<message_transport::SleepPolicy>(sizeof(uint32_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint32_t));
             uint32_values.insert(value);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -378,7 +337,7 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
     auto uint64_producer = [&writer, &uint64_values, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const uint64_t value = static_cast<uint64_t>(i + (NUM_MESSAGES * 2));
-            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(sizeof(uint64_t));
+            auto wrapper = writer->claim_buffer<message_transport::SleepPolicy>(sizeof(uint64_t));
             wrapper.write_to_buffer(reinterpret_cast<const char*>(&value), sizeof(uint64_t));
             uint64_values.insert(value);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -389,7 +348,7 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
     auto str_producer = [&writer, &written_strings, NUM_MESSAGES]() {
         for (int i = 1; i <= NUM_MESSAGES; ++i) {
             const auto msg = std::format("Hello #{}!!!!", i);
-            auto wrapper = writer.claim_buffer<message_transport::SleepPolicy>(msg.size());
+            auto wrapper = writer->claim_buffer<message_transport::SleepPolicy>(msg.size());
             wrapper.write_to_buffer(msg.c_str(), msg.size());
             written_strings.insert(msg);
             std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -401,7 +360,7 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
     auto consumer1 = [&reader1, &reader1_values, &reader1_strings, total_msgs = NUM_MESSAGES * 4]() {
         size_t count = 0;
         while (count < total_msgs) {
-            auto wrapper = reader1.poll_buffer();
+            auto wrapper = reader1->poll_buffer();
             if (wrapper.has_value()) {
                 switch (wrapper->get_payload_size()) {
                     case sizeof(uint8_t): {
@@ -438,7 +397,7 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
     auto consumer2 = [&reader2, &reader2_values, &reader2_strings, total_msgs = NUM_MESSAGES * 4]() {
         size_t count = 0;
         while (count < total_msgs) {
-            auto wrapper = reader2.poll_buffer();
+            auto wrapper = reader2->poll_buffer();
             if (wrapper.has_value()) {
                 switch (wrapper->get_payload_size()) {
                     case sizeof(uint8_t): {
