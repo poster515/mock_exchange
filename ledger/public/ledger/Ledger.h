@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <sqlite3.h>
+#include <absl/container/flat_hash_map.h>
+#include <absl/container/node_hash_map.h>
 
 #include <utils/Config.h>
 #include "archive/ArchiveSubscription.h"
@@ -10,6 +12,8 @@
 #include "sbe/generated/exchange_order/NewOrderSingle.h"
 #include "sbe/generated/exchange_order/CancelOrder.h"
 #include "sbe/generated/exchange_order/ReplaceOrder.h"
+
+#include "ledger/ActiveOrder.h"
 
 namespace ledger {
     /**
@@ -64,5 +68,10 @@ namespace ledger {
 
         std::unique_ptr<ManagedDb> db;
         common::CommonComponents& common;
+
+        Product& get_or_create_product(std::string_view symbol);
+
+        absl::node_hash_map<std::string, ledger::Product> products; // stable iterators
+        absl::flat_hash_map<uint64_t, ledger::ActiveOrder> active_orders;
     };
 }

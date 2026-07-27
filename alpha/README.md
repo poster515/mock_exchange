@@ -37,7 +37,8 @@ alpha/
 │   └── ml_agent.py
 ├── shared/
 │   ├── alpaca_client.py
-│   └── archive_client.py
+│   ├── archive_publication.py
+│   └── archive_subscription.py
 ├── market_data_bot.py
 └── README.md
 ```
@@ -46,3 +47,15 @@ alpha/
 - `alpaca-py` (market data & orders)
 - `message_archive` (serialized publishing)
 - Python `asyncio` (concurrent agent loops)
+
+## Queue Architecture
+This architecture is built around the message_transport and message_archive libraries. We communicate quickly
+between processes using this IPC mechanism. Here are a list of known IPC queues and what they do:
+
+| Queue Name | Description | Writer(s) | Reader(s) |
+|:----------:|:----------|-----------:|-----------:|
+| order_entry | primary order entry queue for each agent to enter orders | python agents | Ledger |
+| order_ack | order acks for each order | ledger | python agents |
+| market_data | market data events for subscribed symbols | market_data_bot | python agents |
+| market_data_ctrl_rqst | control publication for agents to request new symbols, ignore symgols, etc | python agents | market_data_bot |
+| market_data_ctrl_resp | ack channel for agents from market_data_bot | market_data_bot | python agents |

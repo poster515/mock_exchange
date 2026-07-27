@@ -4,3 +4,5 @@ build/
 *.jar
 **/generated/*
 **/CMakeUserPresets.json
+**/CMakeFiles
+CMakeCache.txt
