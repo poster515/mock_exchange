@@ -14,7 +14,7 @@ namespace message_transport {
 
     struct ReadFields {
         std::atomic<uint64_t> read_offset;  // unscaled offset from the end of the global header of the raw mapped memory region, to the oldest unread message.
-        uint64_t last_read_seq_num;         // seq num of the last fully read message
+        uint64_t last_cleared_abs_offset;   // absolute position of the last fully read message
     };
 
     template <typename T, size_t N> requires (N >= sizeof(T))
@@ -52,7 +52,7 @@ namespace message_transport {
 
     // inserted before each message in the queue to manage the state of that message and provide metadata about the message.
     struct MessageHeader {
-        uint64_t sequence_number;           // monotonic sequence number of message (allow to naturally wrap (lol)), starts at 0
+        uint64_t abs_offset;                // absolute offset used to claim this buffer
         uint32_t message_size;              // payload size
         MessageType type;                   // NORMAL or PADDING
         std::atomic<uint8_t> num_readers;    // atomic because multiple readers have to decrement after reading
