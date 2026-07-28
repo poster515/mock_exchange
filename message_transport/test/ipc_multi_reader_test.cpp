@@ -307,6 +307,7 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
 
     auto reader1 = generate_agent("reader1", false);
     auto reader2 = generate_agent("reader2", false);
+    auto reader3 = generate_agent("reader3", false);
 
     const int NUM_MESSAGES = 50000;
     std::unordered_set<uint64_t> written_values;
@@ -355,8 +356,8 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
         }
     };
 
-    std::unordered_set<std::string> reader1_strings, reader2_strings;
-    std::unordered_set<uint64_t> reader1_values, reader2_values;
+    std::unordered_set<std::string> reader1_strings, reader2_strings, reader3_strings;
+    std::unordered_set<uint64_t> reader1_values, reader2_values, reader3_values;
     auto consumer1 = [&reader1, &reader1_values, &reader1_strings, total_msgs = NUM_MESSAGES * 4]() {
         size_t count = 0;
         while (count < total_msgs) {
@@ -431,12 +432,50 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
         }
     };
 
+    auto consumer3 = [&reader3, &reader3_values, &reader3_strings, total_msgs = NUM_MESSAGES * 4]() {
+        size_t count = 0;
+        while (count < total_msgs) {
+            auto wrapper = reader3->poll_buffer();
+            if (wrapper.has_value()) {
+                switch (wrapper->get_payload_size()) {
+                    case sizeof(uint8_t): {
+                        uint8_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint8_t));
+                        reader3_values.insert(static_cast<uint64_t>(value));
+                        break;
+                    }
+                    case sizeof(uint32_t): {
+                        uint32_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint32_t));
+                        reader3_values.insert(static_cast<uint64_t>(value));
+                        break;
+                    }
+                    case sizeof(uint64_t): {
+                        uint64_t value;
+                        std::memcpy(&value, wrapper->get_buffer(), sizeof(uint64_t));
+                        reader3_values.insert(value);
+                        break;
+                    }
+                    default :{
+                        reader3_strings.insert(std::string(wrapper->get_as_view<std::string_view>()));
+                        break;
+                    }
+                }
+                ++count;
+                wrapper->release();
+                // spdlog::info("Consumer read value. Total read so far: {}, total expected: {}", count, NUM_MESSAGES * 4);
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
+        }
+    };
+
     std::thread byte_thread(byte_producer);
     std::thread uint32_thread(uint32_producer);
     std::thread uint64_thread(uint64_producer);
     std::thread str_thread(str_producer);
     std::thread consumer_thread1(consumer1);
     std::thread consumer_thread2(consumer2);
+    std::thread consumer_thread3(consumer3);
 
     byte_thread.join();
     uint32_thread.join();
@@ -444,6 +483,7 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
     str_thread.join();
     consumer_thread1.join();
     consumer_thread2.join();
+    consumer_thread3.join();
 
     written_values.insert(uint8_values.begin(), uint8_values.end());
     written_values.insert(uint32_values.begin(), uint32_values.end());
@@ -453,11 +493,15 @@ TEST_F(IpcQueueMultiReaderTest, MultiProducerDifferentTypes) {
     EXPECT_EQ(written_values, reader1_values);
     EXPECT_EQ(written_values.size(), reader2_values.size());
     EXPECT_EQ(written_values, reader2_values);
+    EXPECT_EQ(written_values.size(), reader3_values.size());
+    EXPECT_EQ(written_values, reader3_values);
 
     EXPECT_EQ(written_strings.size(), reader1_strings.size());
     EXPECT_EQ(written_strings, reader1_strings);
     EXPECT_EQ(written_strings.size(), reader2_strings.size());
     EXPECT_EQ(written_strings, reader2_strings);
+    EXPECT_EQ(written_strings.size(), reader3_strings.size());
+    EXPECT_EQ(written_strings, reader3_strings);
 
     // std::unordered_set<uint64_t> outer_join;
     // std::set_symmetric_difference(
