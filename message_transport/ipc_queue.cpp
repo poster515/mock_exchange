@@ -18,6 +18,7 @@ namespace message_transport {
             , queue_size_bytes(params.queue_size + sizeof(GlobalHeader)) 
             , available_queue_size_bytes(params.queue_size)
             , abs_read_offset(0)
+            , read_message_cnt(0)
             , is_writer(params.is_writer) {
 
         if (params.queue_size > MAX_QUEUE_SIZE_BYTES) {
@@ -180,7 +181,7 @@ namespace message_transport {
 
         // we may have claimed a spot at the end of the buffer that needs a skip message instead. Check, insert, and try again.
         if ((total_message_len + sizeof(MessageHeader)) > bytes_remaining_at_end) {
-            insert_skip_message(rel_write_offset, wrapper.num_readers);
+            insert_skip_message(wrapper.write_offset, wrapper.num_readers);
             return claim_buffer<WritePolicy>(size);
         }
 
@@ -189,11 +190,12 @@ namespace message_transport {
         auto* new_message_header = static_cast<MessageHeader*>(new_buffer_ptr);
 
         // if we're here we are GUARANTEED to have carte blanche write perms. Wrapper will set commit bit and num_readers
-        new_message_header->sequence_number = global_header->write_fields.message_count.fetch_add(1, std::memory_order_acq_rel);
+        new_message_header->abs_offset = wrapper.write_offset;
         new_message_header->message_size = size;
         new_message_header->type = MessageType::NORMAL;
         new_message_header->num_readers.store(wrapper.num_readers, std::memory_order_release);
 
+        global_header->write_fields.message_count.fetch_add(1, std::memory_order_acq_rel);
         // spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
         return IpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
     }
@@ -203,19 +205,18 @@ namespace message_transport {
             throw std::runtime_error("Producer cannot poll for messages in the queue");
         }
 
-        const auto low_reader_watermark = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
-        if (abs_read_offset - low_reader_watermark >= available_queue_size_bytes) {
-            // spdlog::warn("[{}] about to lap slowest reader ", agent_name, low_reader_watermark);
-            return std::nullopt;
-        }
-
         const auto rel_read_offset = abs_read_offset % available_queue_size_bytes;
         void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + rel_read_offset + sizeof(GlobalHeader));
         auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
-        auto block_state = message_header->commit_flag.load(std::memory_order_acquire);
+        auto block_state = message_header->commit_flag.load(std::memory_order_seq_cst);
 
         switch (block_state) {
             case CommitFlag::READY_FOR_CONSUMER: {
+
+                const auto abs_block_offset = message_header->abs_offset;
+                if (abs_read_offset != message_header->abs_offset) {
+                    return std::nullopt;
+                }
 
                 const auto total_message_len = message_header->message_size + sizeof(MessageHeader);
                 assert(total_message_len <= available_queue_size_bytes);
@@ -228,7 +229,8 @@ namespace message_transport {
                 }
 
                 // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
-                // spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", rel_read_offset, message_header->message_size, total_message_len);
+                ++read_message_cnt;
+                // spdlog::info("[{}] Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", agent_name, abs_read_offset, message_header->message_size, total_message_len);
                 return IpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
             }
             case CommitFlag::NOT_READY:
@@ -239,11 +241,8 @@ namespace message_transport {
     }
 
     void IpcQueue::release_buffer(MessageHeader& header) {
-        
-        const auto total_message_len = header.message_size + sizeof(MessageHeader);
-        // if (total_message_len > 100) {
-        //     spdlog::error("Unexpectedly large message size: {}", total_message_len);
-        // }
+        const auto message_len = header.message_size;
+        const auto total_message_len = message_len + sizeof(MessageHeader);
 
         std::ptrdiff_t distance = reinterpret_cast<uint8_t*>(&header) - (reinterpret_cast<uint8_t*>(global_header) + sizeof(GlobalHeader));
         assert(abs_read_offset % available_queue_size_bytes == distance);
@@ -256,24 +255,22 @@ namespace message_transport {
 
         // if all readers haven't processed, then return
         if (prev_count > 1) {
-            // spdlog::info("[{}] Message #{} (type: {}) not read by all consumers. Next read_offset: {}", agent_name, header.sequence_number, type, abs_read_offset);
+            // spdlog::info("[{}] Message #{} (type: {}) not read by all consumers. Next read_offset: {}", agent_name, header.abs_offset, type, abs_read_offset);
             return;
         }
-
-        // spdlog::info("[{}] Clearing message #{} (type: {}). Next read_offset: {}", agent_name, header.sequence_number, type, abs_read_offset);
 
         // clear the message body so its not interpreted weird if it's on a boundary next wrap around
         auto* data = reinterpret_cast<void*>(reinterpret_cast<uint8_t*>(&header) + sizeof(MessageHeader));
         memset(data, 0, header.message_size);
-        global_header->read_fields.last_read_seq_num = header.sequence_number;
+        global_header->read_fields.last_cleared_abs_offset = header.abs_offset;
 
         // now update header flags and bump read offset
         header.message_size = 0;
-        header.sequence_number = 0;
         header.type = MessageType::NORMAL;
         header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
 
         const auto prev_read_low_watermark = global_header->read_fields.read_offset.fetch_add(total_message_len, std::memory_order_acq_rel);
+        // spdlog::info("[{}] bumped low watermark from {} to {}", agent_name, prev_read_low_watermark, prev_read_low_watermark + total_message_len);
         assert(prev_read_low_watermark + total_message_len == abs_read_offset);
     }
 
@@ -292,13 +289,14 @@ namespace message_transport {
         }
     }
 
-    void IpcQueue::insert_skip_message(const uint64_t skip_offset, const size_t num_readers) {
-        assert(skip_offset + sizeof(MessageHeader) <= available_queue_size_bytes);
-        const auto padding_size = available_queue_size_bytes - skip_offset - sizeof(MessageHeader);
-
+    void IpcQueue::insert_skip_message(const uint64_t abs_skip_offset, const size_t num_readers) {
         // same flow as regular producer: header -> payload -> commit
+        const auto skip_offset = abs_skip_offset % available_queue_size_bytes;
+        const auto padding_size = available_queue_size_bytes - skip_offset - sizeof(MessageHeader);
+        assert(skip_offset + sizeof(MessageHeader) <= available_queue_size_bytes);
+
         auto* message_header = reinterpret_cast<MessageHeader*>(reinterpret_cast<uint8_t*>(global_header) + skip_offset + sizeof(GlobalHeader));
-        message_header->sequence_number = 0;
+        message_header->abs_offset = abs_skip_offset;
         message_header->message_size = padding_size;
         message_header->type = MessageType::PADDING;
         message_header->num_readers.store(num_readers, std::memory_order_release);

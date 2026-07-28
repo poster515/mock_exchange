@@ -85,6 +85,14 @@ namespace ledger {
 
         const auto symbol = order.getSymbolAsStringView();
         auto& product = get_or_create_product(symbol);
+
+        const auto id = order.orderId();
+        if (active_orders.contains(id)) {
+            auto order = active_orders.at(id);
+            product.get_book().erase_order(order);
+            spdlog::info("Cancelled order: {}");
+            active_orders.erase(id);
+        }
     }
 
     void Ledger::process_replace_order(const exchange::order::ReplaceOrder& order) {

@@ -13,7 +13,7 @@
 #include "sbe/generated/exchange_order/CancelOrder.h"
 #include "sbe/generated/exchange_order/ReplaceOrder.h"
 
-#include "ledger/ActiveOrder.h"
+#include "ledger/ActiveOrder.h" // includes all other book/product files as well
 
 namespace ledger {
     /**

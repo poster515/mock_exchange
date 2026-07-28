@@ -55,7 +55,8 @@ between processes using this IPC mechanism. Here are a list of known IPC queues 
 | Queue Name | Description | Writer(s) | Reader(s) |
 |:----------:|:----------|-----------:|-----------:|
 | order_entry | primary order entry queue for each agent to enter orders | python agents | Ledger |
-| order_ack | order acks for each order | ledger | python agents |
+| outgoing_orders | orders to be submitted to alpaca | Ledger | market_data_bot |
+| order_ack | order acks for each order | market_data_bot | Ledger |
 | market_data | market data events for subscribed symbols | market_data_bot | python agents |
 | market_data_ctrl_rqst | control publication for agents to request new symbols, ignore symgols, etc | python agents | market_data_bot |
 | market_data_ctrl_resp | ack channel for agents from market_data_bot | market_data_bot | python agents |
