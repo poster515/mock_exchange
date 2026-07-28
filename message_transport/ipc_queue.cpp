@@ -195,7 +195,7 @@ namespace message_transport {
         new_message_header->type = MessageType::NORMAL;
         new_message_header->num_readers.store(wrapper.num_readers, std::memory_order_release);
 
-        spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
+        // spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
         return IpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
     }
 
@@ -282,7 +282,7 @@ namespace message_transport {
         header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
 
         const auto prev_read_low_watermark = global_header->read_fields.read_offset.fetch_add(total_message_len, std::memory_order_acq_rel);
-        spdlog::info("[{}] bumped low watermark from {} to {}", agent_name, prev_read_low_watermark, prev_read_low_watermark + total_message_len);
+        // spdlog::info("[{}] bumped low watermark from {} to {}", agent_name, prev_read_low_watermark, prev_read_low_watermark + total_message_len);
         assert(prev_read_low_watermark + total_message_len == abs_read_offset);
     }
 
