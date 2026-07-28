@@ -195,7 +195,7 @@ namespace message_transport {
         new_message_header->type = MessageType::NORMAL;
         new_message_header->num_readers.store(wrapper.num_readers, std::memory_order_release);
 
-        global_header->write_fields.message_count.fetch_add(1, std::memory_order_acq_rel);
+        global_header->write_fields.message_count.fetch_add(1, std::memory_order_relaxed);
         // spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
         return IpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
     }
@@ -208,7 +208,7 @@ namespace message_transport {
         const auto rel_read_offset = abs_read_offset % available_queue_size_bytes;
         void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + rel_read_offset + sizeof(GlobalHeader));
         auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
-        auto block_state = message_header->commit_flag.load(std::memory_order_seq_cst);
+        auto block_state = message_header->commit_flag.load(std::memory_order_acquire);
 
         switch (block_state) {
             case CommitFlag::READY_FOR_CONSUMER: {
@@ -251,7 +251,7 @@ namespace message_transport {
         abs_read_offset += static_cast<size_t>(total_message_len);
 
         const char type = header.type == MessageType::NORMAL ? 'N' : 'P';
-        const auto prev_count = header.num_readers.fetch_sub(1, std::memory_order_seq_cst);
+        const auto prev_count = header.num_readers.fetch_sub(1, std::memory_order_release);
 
         // if all readers haven't processed, then return
         if (prev_count > 1) {
@@ -275,7 +275,7 @@ namespace message_transport {
     }
 
     void IpcQueue::commit_buffer(MessageHeader& header) {
-        header.commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_seq_cst);
+        header.commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
     }
 
     template <CSpinPolicy ReadPolicy>

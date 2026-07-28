@@ -17,7 +17,7 @@ using namespace message_transport;
 class IpcQueueMultiReaderTest : public ::testing::Test {
 protected:
     static constexpr const char* SHM_NAME = "/ipc_queue_test";
-    static constexpr size_t QUEUE_SIZE = 4096;
+    static constexpr size_t QUEUE_SIZE = 1 << 24;
     static constexpr size_t SMALL_QUEUE_SIZE = 128;
 
     void SetUp() override {
