@@ -14,6 +14,12 @@ class ArchivePublication:
         self.archive_lib.archive_pub_destroy.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
         self.archive_lib.archive_pub_destroy.restype = None
 
+        self.archive_lib.archive_pub_claim.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t]
+        self.archive_lib.archive_pub_claim.restype = ctypes.POINTER(ctypes.c_uint8)
+
+        self.archive_lib.archive_pub_commit.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+        self.archive_lib.archive_pub_commit.restype = ctypes.c_size_t
+
         self.publication_handle = None
 
         print(self.archive_lib.archive_pub_create)
@@ -43,6 +49,13 @@ class ArchivePublication:
 
         self.archive_lib.archive_pub_close(self.publication_handle)
         self.archive_lib.archive_pub_destroy(self.publication_handle)
+
+    def publication_claim(self, size: int, format_func):
+        # these are cumulative - you can claim any number of spots here and then commit them later
+        format_func(self.archive_lib.archive_pub_claim(size))
+
+    def publication_commit(self) -> int:
+        return self.archive_lib.archive_pub_commit()
     
 
 if __name__ == '__main__':
