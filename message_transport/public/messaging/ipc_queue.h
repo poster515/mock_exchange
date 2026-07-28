@@ -110,6 +110,7 @@ namespace message_transport {
         size_t queue_size_bytes;
         size_t available_queue_size_bytes;
         uint64_t abs_read_offset;
+        size_t read_message_cnt;
 
         // grab and/or set the state of the shared memory region
         message_transport::GlobalHeader* global_header;

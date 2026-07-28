@@ -8,7 +8,10 @@ find_package(absl REQUIRED)
 add_library(ledger STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/public/ledger/Ledger.h
     ${CMAKE_CURRENT_SOURCE_DIR}/public/ledger/ActiveOrder.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/public/ledger/Product.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/public/ledger/Book.h
     Ledger.cpp
+    Book.cpp
 )
 
 target_include_directories(ledger PUBLIC

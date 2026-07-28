@@ -1,7 +1,8 @@
 from typing import Any, Dict, List
 import numpy as np
+from alpha.agents.agent import AlpacaAgent
 
-class MomentumAgent:
+class MomentumAgent(AlpacaAgent):
     """Momentum-based trading strategy using pub/sub patterns."""
     
     def __init__(self, window: int = 20, threshold: float = 0.02):

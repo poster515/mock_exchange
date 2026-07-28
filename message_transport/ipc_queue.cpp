@@ -18,6 +18,7 @@ namespace message_transport {
             , queue_size_bytes(params.queue_size + sizeof(GlobalHeader)) 
             , available_queue_size_bytes(params.queue_size)
             , abs_read_offset(0)
+            , read_message_cnt(0)
             , is_writer(params.is_writer) {
 
         if (params.queue_size > MAX_QUEUE_SIZE_BYTES) {
@@ -194,7 +195,7 @@ namespace message_transport {
         new_message_header->type = MessageType::NORMAL;
         new_message_header->num_readers.store(wrapper.num_readers, std::memory_order_release);
 
-        // spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
+        spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
         return IpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
     }
 
@@ -203,16 +204,22 @@ namespace message_transport {
             throw std::runtime_error("Producer cannot poll for messages in the queue");
         }
 
-        const auto low_reader_watermark = global_header->read_fields.read_offset.load(std::memory_order_relaxed);
+        const auto low_reader_watermark = global_header->read_fields.read_offset.load(std::memory_order_seq_cst);
         if (abs_read_offset - low_reader_watermark >= available_queue_size_bytes) {
-            // spdlog::warn("[{}] about to lap slowest reader ", agent_name, low_reader_watermark);
+            spdlog::warn("[{}] about to lap slowest reader", agent_name, low_reader_watermark);
+            return std::nullopt;
+        }
+
+        UnpackedReadersAndWriterOffset wrapper (global_header->write_fields.readers_and_write_offset.load(std::memory_order_seq_cst));
+        if (abs_read_offset >= wrapper.write_offset) {
+            spdlog::warn("[{}] about to lap fastest writer", agent_name, low_reader_watermark);
             return std::nullopt;
         }
 
         const auto rel_read_offset = abs_read_offset % available_queue_size_bytes;
         void* buffer_ptr = static_cast<void*>(static_cast<char*>(static_cast<void*>(global_header)) + rel_read_offset + sizeof(GlobalHeader));
         auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
-        auto block_state = message_header->commit_flag.load(std::memory_order_acquire);
+        auto block_state = message_header->commit_flag.load(std::memory_order_seq_cst);
 
         switch (block_state) {
             case CommitFlag::READY_FOR_CONSUMER: {
@@ -228,6 +235,7 @@ namespace message_transport {
                 }
 
                 // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
+                ++read_message_cnt;
                 // spdlog::info("Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", rel_read_offset, message_header->message_size, total_message_len);
                 return IpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
             }
@@ -274,6 +282,7 @@ namespace message_transport {
         header.commit_flag.store(CommitFlag::NOT_READY, std::memory_order_release);
 
         const auto prev_read_low_watermark = global_header->read_fields.read_offset.fetch_add(total_message_len, std::memory_order_acq_rel);
+        spdlog::info("[{}] bumped low watermark from {} to {}", agent_name, prev_read_low_watermark, prev_read_low_watermark + total_message_len);
         assert(prev_read_low_watermark + total_message_len == abs_read_offset);
     }
 
