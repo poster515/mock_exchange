@@ -33,8 +33,10 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
     const std::chrono::nanoseconds timeout = std::chrono::nanoseconds(1);
 
     message_transport::IpcQueue write_queue(message_transport::IpcQueue::IpcQueueParameters {
-		.file_name = "/dev/shm/queue_benchmark",
-		.queue_size = queue_size
+		.file_name = "/queue_benchmark",
+		.queue_size = queue_size,
+        .is_writer = true,
+        .agent_name = "benchmark_writer"
 	});
 
     std::atomic_bool start {false};
@@ -71,9 +73,10 @@ static void BM_MpscQueueThroughput(benchmark::State& state)
     }
 
 	message_transport::IpcQueue read_queue(message_transport::IpcQueue::IpcQueueParameters {
-		.file_name = "/dev/shm/queue_benchmark",
+		.file_name = "/queue_benchmark",
 		.queue_size = queue_size,
 		.is_writer = false,
+        .agent_name = "benchmark_reader"
 	});
 
 	std::vector<uint8_t> read_message_buffer(message_size);
