@@ -30,7 +30,8 @@
             <validValue name="IOC">3</validValue>
         </enum>
 
-        <type name="price" primitiveType="int64"/>
+        <type name="price" primitiveType="int32"/>
+        <type name="price_factor" primitiveType="int32"/>
         <type name="qty" primitiveType="uint32"/>
         <type name="orderId" primitiveType="uint64"/>
         <type name="symbol" primitiveType="char" length="8"/>
@@ -45,6 +46,7 @@
         <field name="orderQty" id="38" type="qty"/>
         <field name="ordType" id="40" type="OrderType"/>
         <field name="price" id="44" type="price"/>
+        <field name="priceFactor" id="45" type="price_factor"/>
         <field name="timeInForce" id="59" type="TimeInForce"/>
     </message>
 
@@ -60,6 +62,7 @@
         <field name="orderId" id="1" type="orderId"/>
         <field name="newQty" id="38" type="qty"/>
         <field name="newPrice" id="44" type="price"/>
+        <field name="newPriceFactor" id="45" type="price_factor"/>
     </message>
 
 </sbe:messageSchema>
