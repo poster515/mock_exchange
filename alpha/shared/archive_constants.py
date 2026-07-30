@@ -1,8 +1,11 @@
-
+import os
 import ctypes
 from typing import Optional
 from enum import Enum
 from dataclasses import dataclass
+from pathlib import Path
+import platform
+
 
 from alpha.shared.archive_messages import OrderType, OrderSide
 
@@ -28,12 +31,13 @@ class OrderRequest:
     price_factor: int
     order_id: Optional[str] = None
     client_order_id: Optional[str] = None
-    side: OrderSide
-    type: OrderType
+    side: OrderSide = OrderSide.Buy
+    type: OrderType = OrderType.Market
 
 class ArchiveConstants:
-    archive_lib = ctypes.CDLL('/usr/local/lib/libarchive_shared.dylib')
-    SBE_DEFINITION_LOCATION = "/usr/local/include/order_entry.xml"
+    INSTALL_PATH = Path(os.environ.get("ARCHIVE_LIB_DIR", "/usr/local/lib"))
+    TARGET_EXTENSION = "dylib" if "macOS" in platform.platform() else "so"
+    archive_lib = ctypes.CDLL(os.path.join(INSTALL_PATH, f"libarchive_shared.{TARGET_EXTENSION}"))
 
     # SUBSCRIPTION
     archive_lib.archive_sub_create.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
@@ -67,7 +71,7 @@ class ArchiveConstants:
     archive_lib.archive_pub_commit.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
     archive_lib.archive_pub_commit.restype = ctypes.c_size_t
 
-    DEFAULT_SHM_PATH = "/tmp"
+    DEFAULT_SHM_PATH = Path("/")
     DEFAULT_QUEUE_SIZE = 2 ** 24 # 16 MB
 
     ORDER_ENTRY_QUEUE = "order_entry"

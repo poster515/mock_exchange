@@ -20,6 +20,7 @@ jobs:
         sudo apt-get install -y python3 build-essential
         pip install conan==2.*
         pip install cmake==3.28.*
+        pip install -r requirements.txt
         conan profile detect
 
     - name: Install SBE and Java dependencies
@@ -36,7 +37,7 @@ jobs:
         pwd
         ls -la
         conan install . --output-folder build --build=missing -s compiler.cppstd=20
-        cmake -B build/build/Release -DCMAKE_TOOLCHAIN_FILE=./build/build/Release/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release .
+        cmake -B build/build/Release -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/install" -DCMAKE_TOOLCHAIN_FILE=./build/build/Release/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release .
         pwd
         ls -la 
         cd ./build/build/Release
@@ -47,11 +48,11 @@ jobs:
     - name: Run tests
       run: |
         cd ./build/build/Release
+        cmake --install .
         ctest --output-on-failure
 
-    # - name: Run benchmarks
-    #   run: |
-    #     cd ./build/build/Release/message_transport/benchmark
-    #     ls -la $RUNNER_TEMP
-    #     ./consumer_benchmark
+    - name: Run benchmarks
+      run: |
+        cd ./build/build/Release/message_transport/benchmark
+        ./consumer_benchmark
 

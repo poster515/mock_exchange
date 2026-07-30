@@ -30,8 +30,8 @@ I'm using cmake 4.2 and conan2 for this project. Here is the setup for in-tree b
 ```bash
 mkdir -p build
 conan profile path default
-conan install . -of build -s build_type=Debug --build=missing
-cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug
+conan install . -of . -s build_type=Debug --build=missing
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=/usr/local
 cmake --build build -j8
 ```
 

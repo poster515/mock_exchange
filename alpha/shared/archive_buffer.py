@@ -1,6 +1,5 @@
 from ctypes import *
 
-from alpha.shared.archive_publication import ArchivePublication
 from alpha.shared.archive_constants import ArchiveConstants
 from alpha.shared.archive_messages import MessageHeader
 
