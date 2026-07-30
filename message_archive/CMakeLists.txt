@@ -41,8 +41,6 @@ target_link_libraries(media_driver
 # and finally we need to compile the python wrapper into a .so file
 # this may require sudo perms depending on your setup
 include(GNUInstallDirs)
-set(CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
-
 message(STATUS "Using install lib dir: ${CMAKE_INSTALL_LIBDIR}")
 
 add_library(archive_shared

@@ -1,8 +1,9 @@
-
+import os
 import ctypes
 from typing import Optional
 from enum import Enum
 from dataclasses import dataclass
+from pathlib import Path
 
 from alpha.shared.archive_messages import OrderType, OrderSide
 
@@ -32,7 +33,8 @@ class OrderRequest:
     type: OrderType = OrderType.Market
 
 class ArchiveConstants:
-    archive_lib = ctypes.CDLL('/usr/local/lib/libarchive_shared.dylib')
+    INSTALL_PATH = Path(os.environ.get("ARCHIVE_LIB_DIR", "/usr/local/lib"))
+    archive_lib = ctypes.CDLL(os.path.join(INSTALL_PATH, "libarchive_shared.dylib"))
 
     # SUBSCRIPTION
     archive_lib.archive_sub_create.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
