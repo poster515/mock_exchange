@@ -43,8 +43,7 @@ jobs:
         cd ./build/build/Release
         clear && make -j8
         mkdir -p /usr/local/lib
-        mkdir -p /usr/local/include
-        cmake --install .
+        sudo cmake --install .
       env:
         TERM: xterm
 
