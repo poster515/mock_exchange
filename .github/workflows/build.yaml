@@ -42,14 +42,14 @@ jobs:
         ls -la 
         cd ./build/build/Release
         clear && make -j8
-        mkdir -p /usr/local/lib
-        sudo cmake --install .
       env:
         TERM: xterm
 
     - name: Run tests
       run: |
+        mkdir -p /usr/local/lib
         cd ./build/build/Release
+        sudo cmake --install .
         ctest --output-on-failure
 
     - name: Run benchmarks
