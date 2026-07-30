@@ -1,5 +1,10 @@
 
 import ctypes
+from typing import Optional
+from enum import Enum
+from dataclasses import dataclass
+
+from alpha.shared.archive_messages import OrderType, OrderSide
 
 MessageCallback = ctypes.CFUNCTYPE(
     ctypes.c_int,                       # return type
@@ -7,9 +12,29 @@ MessageCallback = ctypes.CFUNCTYPE(
     ctypes.c_size_t                     # size_t
 )
 
+class OrderAction(Enum):
+    """Order action types."""
+    NEW = "NEW"
+    CANCEL_REPLACE = "CANCEL_REPLACE"
+    CANCEL = "CANCEL"
+
+@dataclass
+class OrderRequest:
+    """Order request to submit via SBE."""
+    action: OrderAction
+    symbol: str
+    quantity: int
+    price: int
+    price_factor: int
+    order_id: Optional[str] = None
+    client_order_id: Optional[str] = None
+    side: OrderSide
+    type: OrderType
 
 class ArchiveConstants:
     archive_lib = ctypes.CDLL('/usr/local/lib/libarchive_shared.dylib')
+    SBE_DEFINITION_LOCATION = "/usr/local/include/order_entry.xml"
+
     # SUBSCRIPTION
     archive_lib.archive_sub_create.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
     archive_lib.archive_sub_create.restype = ctypes.POINTER(ctypes.c_void_p)

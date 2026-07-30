@@ -1,32 +1,16 @@
 import logging
 from dataclasses import dataclass
 from typing import Optional
-from enum import Enum
 import time
+
+from alpha.agents.agent import AlpacaAgent
+from alpha.shared.archive_messages import *
+from alpha.shared.archive_constants import *
 
 """Mean Reversion Trading Client for Alpaca Market Data with SBE Order Submission."""
 
 
 logger = logging.getLogger(__name__)
-
-
-class OrderAction(Enum):
-    """Order action types."""
-    NEW = "NEW"
-    CANCEL_REPLACE = "CANCEL_REPLACE"
-    CANCEL = "CANCEL"
-
-
-@dataclass
-class OrderRequest:
-    """Order request to submit via SBE."""
-    action: OrderAction
-    symbol: str
-    quantity: int
-    price: float
-    order_id: Optional[str] = None
-    client_order_id: Optional[str] = None
-
 
 @dataclass
 class MeanReversionParams:
@@ -40,13 +24,12 @@ class MeanReversionParams:
     volume_threshold: int = 100000
 
 
-class MeanReversionClient:
+class MeanReversionClient(AlpacaAgent):
     """Mean reversion trading client with Alpaca market data integration."""
 
     def __init__(
         self,
         market_data_client,
-        archive_publication,
         symbol: str = "AAPL",
         params: Optional[MeanReversionParams] = None,
     ):
@@ -60,7 +43,6 @@ class MeanReversionClient:
             params: MeanReversionParams configuration
         """
         self.market_data_client = market_data_client
-        self.archive_publication = archive_publication
         self.symbol = symbol
         self.params = params or MeanReversionParams()
         
@@ -74,12 +56,9 @@ class MeanReversionClient:
         
         logger.info(f"Initialized MeanReversionClient for {symbol}")
 
-    def poll(self) -> Optional[OrderRequest]:
+    def execute_strategy(self):
         """
         Execute one polling cycle. Called by external runner.
-        
-        Returns:
-            OrderRequest if an order action is triggered, None otherwise
         """
         try:
             # 1. Fetch latest market data
@@ -99,12 +78,10 @@ class MeanReversionClient:
             if not self._check_order_rate_limit():
                 return None
 
-            # 4. Generate order request
-            order_request = self._generate_order_request(signal)
-            if order_request:
-                self._submit_order(order_request)
-            
-            return order_request
+            # 4. Generate and submit order requests
+            signal = self._generate_order_request(signal)
+            if signal is not None:
+                super().publish_order(signal)
 
         except Exception as e:
             logger.error(f"Error in polling cycle: {e}")
@@ -186,6 +163,8 @@ class MeanReversionClient:
                 quantity=quantity,
                 price=price,
                 client_order_id=f"MR_{int(time.time() * 1000)}_BUY",
+                side=OrderSide.Buy,
+                type=OrderType.Limit
             )
 
         elif signal == -1:  # SELL
@@ -198,6 +177,7 @@ class MeanReversionClient:
                     price=self.current_price + self.params.min_price_movement,
                     order_id=self.active_order_id,
                     client_order_id=f"MR_{int(time.time() * 1000)}_SELL",
+                    side=OrderSide.Sell,
                 )
             else:
                 # Direct sell if we have position
@@ -207,44 +187,8 @@ class MeanReversionClient:
                     quantity=self.position_size,
                     price=self.current_price + self.params.min_price_movement,
                     client_order_id=f"MR_{int(time.time() * 1000)}_SELL",
+                    side=OrderSide.Sell,
+                    type=OrderType.Limit
                 )
 
         return None
-
-    def _submit_order(self, order_request: OrderRequest) -> None:
-        """
-        Submit order via ArchivePublication in SBE format.
-        
-        Args:
-            order_request: OrderRequest to submit
-        """
-        try:
-            # Serialize to SBE format and submit to C++ ledger via IPC
-            sbe_payload = self._serialize_to_sbe(order_request)
-            self.archive_publication.publish(sbe_payload)
-            
-            self.active_order_id = order_request.order_id
-            self.last_order_time = time.time()
-            logger.info(f"Submitted order: {order_request}")
-
-        except Exception as e:
-            logger.error(f"Failed to submit order: {e}")
-
-    def _serialize_to_sbe(self, order_request: OrderRequest) -> bytes:
-        """
-        Serialize OrderRequest to SBE format.
-        
-        Args:
-            order_request: OrderRequest to serialize
-            
-        Returns:
-            SBE encoded bytes
-        """
-        # Placeholder: Implement actual SBE serialization
-        # This would use your SBE schema codecs
-        return b""
-
-    def update_position(self, quantity: int) -> None:
-        """Update current position size (called by external ledger feedback)."""
-        self.position_size = quantity
-        logger.debug(f"Position updated: {quantity}")

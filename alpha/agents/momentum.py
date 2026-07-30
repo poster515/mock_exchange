@@ -1,6 +1,9 @@
-from typing import Any, Dict, List
-import numpy as np
+from typing import Any, Dict, List, Optional
+import time
+
 from alpha.agents.agent import AlpacaAgent
+from alpha.shared.archive_messages import *
+from alpha.shared.archive_constants import *
 
 class MomentumAgent(AlpacaAgent):
     """Momentum-based trading strategy using pub/sub patterns."""
@@ -15,38 +18,34 @@ class MomentumAgent(AlpacaAgent):
         """
         self.window = window
         self.threshold = threshold
-        self.prices: List[float] = []
-        self.subscribers: List[callable] = []
-    
-    def subscribe(self, callback: callable) -> None:
-        """Subscribe to trading signals."""
-        self.subscribers.append(callback)
-    
-    def publish(self, signal: Dict[str, Any]) -> None:
-        """Publish trading signals to subscribers."""
-        for callback in self.subscribers:
-            callback(signal)
-    
-    def update(self, price: float) -> None:
-        """Update with new price and check for momentum signal."""
-        self.prices.append(price)
-        
-        if len(self.prices) >= self.window:
-            momentum = self._calculate_momentum()
-            signal = self._generate_signal(momentum)
-            if signal is not None:
-                self.publish(signal)
+        self.prices: Dict[str, List[float]] = {} # symbol -> price history
+
+    def execute_strategy(self):
+        self._update_market_data()
+
+        for symbol, price_history in self.prices.items():
+            if len(price_history) >= self.window:
+                momentum = self._calculate_momentum()
+                signal = self._generate_signal(symbol, momentum)
+                if signal is not None:
+                    super().publish_order(signal)
     
     def _calculate_momentum(self) -> float:
         """Calculate momentum as percentage change."""
         return (self.prices[-1] - self.prices[-self.window]) / self.prices[-self.window]
     
-    def _generate_signal(self, momentum: float) -> Dict[str, Any] | None:
+    def _generate_signal(self, symbol: str, momentum: float) -> Optional[OrderRequest]:
         """Generate trading signal if momentum exceeds threshold."""
         if abs(momentum) > self.threshold:
-            return {
-                "action": "BUY" if momentum > 0 else "SELL",
-                "momentum": momentum,
-                "strength": abs(momentum)
-            }
+            return OrderRequest(
+                action=OrderAction.NEW,
+                symbol=symbol,
+                quantity=min(100, self.params.max_position_size - self.position_size),
+                price=self.current_price - self.params.min_price_movement,
+                client_order_id=f"MR_{int(time.time() * 1000)}_BUY",
+                side = OrderSide.Buy
+            )
         return None
+
+    def _update_market_data(self):
+        pass

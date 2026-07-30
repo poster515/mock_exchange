@@ -1,7 +1,9 @@
 
 import os
-from alpha.shared.archive_constants import ArchiveConstants
+from typing import Any
 
+from alpha.shared.archive_constants import ArchiveConstants
+from alpha.shared.archive_buffer import ClaimedBuffer
 
 class ArchivePublication:
 
@@ -33,13 +35,13 @@ class ArchivePublication:
         ArchiveConstants.archive_lib.archive_pub_close(self.publication_handle)
         ArchiveConstants.archive_lib.archive_pub_destroy(self.publication_handle)
 
-    def publication_claim(self, size: int, format_func):
+    def publication_claim(self, message_type: Any) -> ClaimedBuffer:
         # these are cumulative - you can claim any number of spots here and then commit them later
-        format_func(ArchiveConstants.archive_lib.archive_pub_claim(self.publication_handle, size))
+        return ClaimedBuffer(self.publication_handle, message_type)
 
     def publication_commit(self) -> int:
         return ArchiveConstants.archive_lib.archive_pub_commit(self.publication_handle)
-    
+
 
 if __name__ == '__main__':
     archive = ArchivePublication()
