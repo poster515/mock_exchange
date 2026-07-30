@@ -37,7 +37,7 @@ jobs:
         pwd
         ls -la
         conan install . --output-folder build --build=missing -s compiler.cppstd=20
-        cmake -B build/build/Release -DCMAKE_TOOLCHAIN_FILE=./build/build/Release/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release .
+        cmake -B build/build/Release -DCMAKE_INSTALL_PREFIX="${GITHUB_WORKSPACE}/install" -DCMAKE_TOOLCHAIN_FILE=./build/build/Release/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release .
         pwd
         ls -la 
         cd ./build/build/Release
@@ -47,9 +47,8 @@ jobs:
 
     - name: Run tests
       run: |
-        mkdir -p /usr/local/lib
         cd ./build/build/Release
-        sudo cmake --install .
+        cmake --install .
         ctest --output-on-failure
 
     - name: Run benchmarks
