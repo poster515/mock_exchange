@@ -71,7 +71,7 @@ class ArchiveConstants:
     archive_lib.archive_pub_commit.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
     archive_lib.archive_pub_commit.restype = ctypes.c_size_t
 
-    DEFAULT_SHM_PATH = "/tmp"
+    DEFAULT_SHM_PATH = Path("/")
     DEFAULT_QUEUE_SIZE = 2 ** 24 # 16 MB
 
     ORDER_ENTRY_QUEUE = "order_entry"
