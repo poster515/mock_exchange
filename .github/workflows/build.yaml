@@ -42,8 +42,8 @@ jobs:
         ls -la 
         cd ./build/build/Release
         clear && make -j8
-        mkdir /usr/local/lib
-        mkdir /usr/loca/include
+        mkdir -p /usr/local/lib
+        mkdir -p /usr/local/include
         cmake --install .
       env:
         TERM: xterm

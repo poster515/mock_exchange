@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
 from typing import Optional
-import sbe
-import time
 
 from alpha.shared.archive_constants import *
 from alpha.shared.archive_messages import *
@@ -16,9 +14,6 @@ class AlpacaAgent(ABC):
         self.md_ctrl_subscription = None
         self.md_subscription = None
         self.name = agent_name
-
-        with open(ArchiveConstants.SBE_DEFINITION_LOCATION, 'r') as f:
-            self.schema = sbe.Schema.parse(f)
 
     def start(self):
         self.order_publication = ArchivePublication(ArchiveConstants.LEDGER_IN_QUEUE)

@@ -33,7 +33,6 @@ class OrderRequest:
 
 class ArchiveConstants:
     archive_lib = ctypes.CDLL('/usr/local/lib/libarchive_shared.dylib')
-    SBE_DEFINITION_LOCATION = "/usr/local/include/order_entry.xml"
 
     # SUBSCRIPTION
     archive_lib.archive_sub_create.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
