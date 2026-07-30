@@ -4,6 +4,8 @@ from typing import Optional
 from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
+import platform
+
 
 from alpha.shared.archive_messages import OrderType, OrderSide
 
@@ -34,7 +36,8 @@ class OrderRequest:
 
 class ArchiveConstants:
     INSTALL_PATH = Path(os.environ.get("ARCHIVE_LIB_DIR", "/usr/local/lib"))
-    archive_lib = ctypes.CDLL(os.path.join(INSTALL_PATH, "libarchive_shared.dylib"))
+    TARGET_EXTENSION = "dylib" if "macOS" in platform.platform() else "so"
+    archive_lib = ctypes.CDLL(os.path.join(INSTALL_PATH, f"libarchive_shared.{TARGET_EXTENSION}"))
 
     # SUBSCRIPTION
     archive_lib.archive_sub_create.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
