@@ -28,8 +28,8 @@ class OrderRequest:
     price_factor: int
     order_id: Optional[str] = None
     client_order_id: Optional[str] = None
-    side: OrderSide
-    type: OrderType
+    side: OrderSide = OrderSide.Buy
+    type: OrderType = OrderType.Market
 
 class ArchiveConstants:
     archive_lib = ctypes.CDLL('/usr/local/lib/libarchive_shared.dylib')

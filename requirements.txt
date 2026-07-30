@@ -3,3 +3,4 @@ alpaca-py
 invoke
 cffi
 cstruct
+pytest

@@ -78,4 +78,13 @@ extern "C" {
             printf("Error closing subscription!");
         }
     }
+
+    void archive_sub_destroy(void* ptr) {
+        try {
+            auto* sub = reinterpret_cast<archive::ArchiveSubscription*>(ptr);
+            delete sub;
+        } catch (...) {
+            printf("Error deleting subscription!");
+        }
+    }
 }
