@@ -8,6 +8,7 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 
+from alpha.shared.archive_constants import ArchiveConstants
 from alpha.shared.archive_publication import ArchivePublication
 from alpha.shared.archive_subscription import ArchiveSubscription
 
@@ -33,10 +34,10 @@ class MarketDataClient:
         self.ledger_subscription = None
     
     def start(self):
-        self.md_publication = ArchivePublication()
-        self.ctrl_publication = ArchivePublication()
-        self.ctrl_subscription = ArchiveSubscription()
-        self.ledger_subscription = ArchiveSubscription()
+        self.md_publication = ArchivePublication(ArchiveConstants.MARKET_DATA_QUEUE)
+        self.ctrl_publication = ArchivePublication(ArchiveConstants.MARKET_DATA_CTRL_RESP)
+        self.ctrl_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_CTRL_RQST)
+        self.ledger_subscription = ArchiveSubscription(ArchiveConstants.LEDGER_OUT_QUEUE)
 
     def run(self):
         self._check_and_respond_control_pub()
@@ -46,7 +47,7 @@ class MarketDataClient:
     def _check_and_respond_control_pub(self):
         # TODO: check the control subscription for new symbols to track, symbols to ignore, etc
             # Then respond on the control publication to applicable agents
-        self.ctrl_subscription.archive_lib
+        self.ctrl_subscription.subscription_handle
         pass
 
     def _query_and_publish_market_data(self, symbols: List[str]) -> None:
