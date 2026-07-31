@@ -35,13 +35,14 @@
         <type name="qty" primitiveType="uint32"/>
         <type name="orderId" primitiveType="uint64"/>
         <type name="symbol" primitiveType="char" length="8"/>
+        <type name="symbolId" primitiveType="uint64"/>
 
     </types>
 
 
     <message name="NewOrderSingle" id="1">
         <field name="orderId" id="1" type="orderId"/>
-        <field name="symbol" id="55" type="symbol"/>
+        <field name="symbolId" id="56" type="symbolId"/>
         <field name="side" id="54" type="Side"/>
         <field name="orderQty" id="38" type="qty"/>
         <field name="ordType" id="40" type="OrderType"/>
@@ -53,7 +54,7 @@
 
     <message name="CancelOrder" id="2">
         <field name="orderId" id="1" type="orderId"/>
-        <field name="symbol" id="55" type="symbol"/>
+        <field name="symbolId" id="56" type="symbolId"/>
         <field name="side" id="54" type="Side"/>
     </message>
 
@@ -63,6 +64,11 @@
         <field name="newQty" id="38" type="qty"/>
         <field name="newPrice" id="44" type="price"/>
         <field name="newPriceFactor" id="45" type="price_factor"/>
+    </message>
+
+    <message name="NewSymbolAdd" id="100">
+        <field name="symbol" id="55" type="symbol"/>
+        <field name="symbolId" id="56" type="symbolId"/>
     </message>
 
 </sbe:messageSchema>
