@@ -171,7 +171,7 @@ class MeanReversionClient(AlpacaAgent):
             if self.active_order_id:
                 # Cancel existing buy order and submit sell
                 return OrderRequest(
-                    action=OrderAction.CANCEL_REPLACE,
+                    action=OrderAction.REPLACE,
                     symbol=self.symbol,
                     quantity=self.position_size,
                     price=self.current_price + self.params.min_price_movement,

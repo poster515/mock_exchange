@@ -47,7 +47,8 @@ namespace message_transport {
 
     enum class CommitFlag : uint8_t {
         NOT_READY = 0,
-        READY_FOR_CONSUMER = 1
+        READY_FOR_CONSUMER = 1,
+        ABORTED = 2
     };
 
     // inserted before each message in the queue to manage the state of that message and provide metadata about the message.

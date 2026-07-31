@@ -92,6 +92,7 @@ namespace message_transport {
 
         void release_buffer(MessageHeader& header);
         void commit_buffer(MessageHeader& header);
+        void abort_buffer(MessageHeader& header);
 
         size_t num_readers(std::memory_order order = std::memory_order_acquire) const;
         void close();

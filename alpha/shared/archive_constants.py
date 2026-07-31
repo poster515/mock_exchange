@@ -18,7 +18,7 @@ MessageCallback = ctypes.CFUNCTYPE(
 class OrderAction(Enum):
     """Order action types."""
     NEW = "NEW"
-    CANCEL_REPLACE = "CANCEL_REPLACE"
+    REPLACE = "REPLACE"
     CANCEL = "CANCEL"
 
 @dataclass
