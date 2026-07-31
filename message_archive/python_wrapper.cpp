@@ -14,8 +14,6 @@ extern "C" {
                 std::strerror(errno),
                 errno);
         }
-        spdlog::info("Attempting to delete archive {}...", queue_name);
-        std::remove(queue_name);
     }
 
     archive::ArchivePublication* archive_pub_create(const char* queue_name, size_t queue_size, const char* agent_name) {

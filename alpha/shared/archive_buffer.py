@@ -26,7 +26,7 @@ class ClaimedBuffer:
         self._msg.header.templateId = self._message_type.TEMPLATE_ID
         self._msg.header.schemaId = 1
         self._msg.header.version = 1
-        self._msg.header.blockLength = (sizeof(self._message_type) - sizeof(MessageHeader))
+        self._msg.header.blockLength = sizeof(self._message_type) - sizeof(MessageHeader)
 
         return self._msg
 
