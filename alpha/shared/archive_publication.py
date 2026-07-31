@@ -39,6 +39,7 @@ class ArchivePublication:
 
     def publication_claim(self, message_type: Any) -> ClaimedBuffer:
         # these are cumulative - you can claim any number of spots here and then commit them later
+        # EXCEPT when using these in a with...as loop. ClaimedBuffer will auto-commit upon exiting.
         return ClaimedBuffer(self.publication_handle, message_type)
 
     def publication_commit(self) -> int:

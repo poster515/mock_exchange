@@ -16,13 +16,15 @@ namespace message_transport {
     class IpcQueueRaiiWrapper
     {
     public:
-        IpcQueueRaiiWrapper(std::byte* buffer, size_t buffer_size)
-            : wrapper(buffer, buffer_size) {}
+        IpcQueueRaiiWrapper(std::byte* buffer, size_t buffer_size, IpcQueue& queue)
+            : wrapper(buffer, buffer_size)
+            , queue(queue) {}
 
         ~IpcQueueRaiiWrapper() = default;
 
     protected:
         std::span<std::byte> wrapper;
+        IpcQueue& queue;
     };
 
     /**
@@ -39,14 +41,12 @@ namespace message_transport {
     {
     public:
         IpcQueueRaiiReaderWrapper(std::byte* buffer, size_t buffer_size, IpcQueue& queue)
-            : IpcQueueRaiiWrapper(buffer, buffer_size)
-            , queue(queue) {}
+            : IpcQueueRaiiWrapper(buffer, buffer_size, queue){}
 
         IpcQueueRaiiReaderWrapper(const IpcQueueRaiiReaderWrapper&) = delete;
         IpcQueueRaiiReaderWrapper& operator=(const IpcQueueRaiiReaderWrapper&) = delete;
         IpcQueueRaiiReaderWrapper(IpcQueueRaiiReaderWrapper&& other)
-            : IpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size())
-            , queue(other.queue) {
+            : IpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size(), other.queue) {
             // need to relinquish the other wrapper of its resources/ownership
             other.wrapper = std::span<std::byte>();
             other.released = true;
@@ -107,18 +107,17 @@ namespace message_transport {
 
     private:
         bool released { false };
-        IpcQueue& queue;
     };
 
     class IpcQueueRaiiWriterWrapper : public IpcQueueRaiiWrapper
     {
     public:
-        IpcQueueRaiiWriterWrapper(std::byte* buffer, size_t buffer_size)
-            : IpcQueueRaiiWrapper(buffer, buffer_size) {}
+        IpcQueueRaiiWriterWrapper(std::byte* buffer, size_t buffer_size, IpcQueue& queue)
+            : IpcQueueRaiiWrapper(buffer, buffer_size, queue) {}
 
         // useful for container operations (emplace_back, etc)
         IpcQueueRaiiWriterWrapper(IpcQueueRaiiWriterWrapper&& other)
-            : IpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size()){
+            : IpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size(), other.queue){
         };
         // delete all other constructors though
         IpcQueueRaiiWriterWrapper& operator=(IpcQueueRaiiWriterWrapper&&) = delete;
@@ -136,7 +135,12 @@ namespace message_transport {
 
         void commit() {
             auto* hdr = reinterpret_cast<MessageHeader*>(wrapper.data());
-            hdr->commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
+            queue.commit_buffer(*hdr);
+        }
+
+        void abort() {
+            auto* hdr = reinterpret_cast<MessageHeader*>(wrapper.data());
+            queue.abort_buffer(*hdr);
         }
 
         std::span<std::byte> get_as_span() {

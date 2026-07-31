@@ -203,7 +203,7 @@ namespace message_transport {
 
         global_header->write_fields.message_count.fetch_add(1, std::memory_order_relaxed);
         // spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
-        return IpcQueueRaiiWriterWrapper(reinterpret_cast<std::byte*>(new_buffer_ptr), total_message_len);
+        return IpcQueueRaiiWriterWrapper(reinterpret_cast<std::byte*>(new_buffer_ptr), total_message_len, *this);
     }
 
     std::optional<IpcQueueRaiiReaderWrapper> IpcQueue::poll_buffer() {
@@ -241,6 +241,11 @@ namespace message_transport {
                 ++read_message_cnt;
                 // spdlog::info("[{}] Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", agent_name, abs_read_offset, message_header->message_size, total_message_len);
                 return IpcQueueRaiiReaderWrapper(reinterpret_cast<std::byte*>(buffer_ptr), total_message_len, *this);
+            }
+            case CommitFlag::ABORTED: {
+                spdlog::info("[{}] found aborted message of size {}, skipping", agent_name, message_header->message_size);
+                release_buffer(*message_header);
+                return poll_buffer();
             }
             case CommitFlag::NOT_READY:
             default: {
@@ -285,6 +290,14 @@ namespace message_transport {
 
     void IpcQueue::commit_buffer(MessageHeader& header) {
         header.commit_flag.store(CommitFlag::READY_FOR_CONSUMER, std::memory_order_release);
+    }
+
+    void IpcQueue::abort_buffer(MessageHeader& header) {
+        // something has gone wrong and agent has chosen to abort this claim. Usually due to a 
+        // caught exception on the application end
+        auto* data = reinterpret_cast<void*>(reinterpret_cast<uint8_t*>(&header) + sizeof(MessageHeader));
+        memset(data, 0, header.message_size);
+        header.commit_flag.store(CommitFlag::ABORTED, std::memory_order_release);
     }
 
     template <CSpinPolicy ReadPolicy>
