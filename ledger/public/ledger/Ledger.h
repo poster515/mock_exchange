@@ -69,9 +69,7 @@ namespace ledger {
         std::unique_ptr<ManagedDb> db;
         common::CommonComponents& common;
 
-        Product& get_or_create_product(std::string_view symbol);
-
-        absl::node_hash_map<std::string, ledger::Product> products; // stable iterators
+        absl::node_hash_map<uint64_t, ledger::Product> products; // stable iterators
         absl::flat_hash_map<uint64_t, ledger::ActiveOrder> active_orders;
     };
 }

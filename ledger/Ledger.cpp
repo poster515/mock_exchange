@@ -71,9 +71,11 @@ namespace ledger {
          *  - cache order somewhere
          *  - add to PnL machine
          */
-        const auto symbol = new_order.getSymbolAsStringView();
-        auto& product = get_or_create_product(symbol);
-
+        const auto symbol_id = new_order.symbolId();
+        if (!products.contains(symbol_id)) {
+            spdlog::warn("Ledger::process_new_order: could not find product for id: {}", symbol_id);
+            return;
+        }
     }
     void Ledger::process_cancel_order(const exchange::order::CancelOrder& order) {
         /**
@@ -83,8 +85,13 @@ namespace ledger {
          *  - add to PnL machine
          */
 
-        const auto symbol = order.getSymbolAsStringView();
-        auto& product = get_or_create_product(symbol);
+        const auto symbol_id = order.symbolId();
+        if (!products.contains(symbol_id)) {
+            spdlog::warn("Ledger::process_cancel_order: could not find product for id: {}", symbol_id);
+            return;
+        }
+
+        auto& product = products.at(symbol_id);
 
         const auto id = order.orderId();
         if (active_orders.contains(id)) {
@@ -100,10 +107,5 @@ namespace ledger {
         if (!active_orders.contains(order_id)) {
             spdlog::warn("Received replace order for non-existent order_id: {}", order_id);
         }
-    }
-
-    Product& Ledger::get_or_create_product(std::string_view symbol) {
-        auto it = products.try_emplace(std::string(symbol), symbol).first;
-        return it->second;
     }
 }

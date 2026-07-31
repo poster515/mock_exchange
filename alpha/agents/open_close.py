@@ -16,7 +16,7 @@ class OpenCloseAgent(AlpacaAgent):
         self.positions: Dict[str, int] = {}
         self.latest_price: Dict[str, (int, int)] = {}
 
-    def execute_strategy(self):
+    def execute_strategy(self, epoch_sec: float):
         self._update_market_data()
         now = datetime.datetime.now(tz=ZoneInfo("America/New_York"))
 

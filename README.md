@@ -41,7 +41,7 @@ In order to use the gateways you'll need to generate the SBE headers/files first
 
 sudo apt install default-jdk
 java -version
-cd ./gateway/public/parser
+cd ./sbe_messages/public/sbe
 curl -L https://repo1.maven.org/maven2/uk/co/real-logic/sbe-all/1.30.0/sbe-all-1.30.0.jar -o sbe-all.jar
 java -Dsbe.target.language=Cpp -Dsbe.output.dir=generated -jar sbe-all.jar order_entry.xml
 

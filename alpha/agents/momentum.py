@@ -20,7 +20,7 @@ class MomentumAgent(AlpacaAgent):
         self.threshold = threshold
         self.prices: Dict[str, List[float]] = {} # symbol -> price history
 
-    def execute_strategy(self):
+    def execute_strategy(self, epoch_sec: float):
         self._update_market_data()
 
         for symbol, price_history in self.prices.items():

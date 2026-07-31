@@ -56,7 +56,7 @@ class MeanReversionClient(AlpacaAgent):
         
         logger.info(f"Initialized MeanReversionClient for {symbol}")
 
-    def execute_strategy(self):
+    def execute_strategy(self, epoch_sec: float):
         """
         Execute one polling cycle. Called by external runner.
         """

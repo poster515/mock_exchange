@@ -36,6 +36,7 @@ class ArchivePublication:
         print(f"python: deleting handle {self.publication_handle}")
         ArchiveConstants.archive_lib.archive_pub_close(self.publication_handle)
         ArchiveConstants.archive_lib.archive_pub_destroy(self.publication_handle)
+        self.publication_handle = None
 
     def publication_claim(self, message_type: Any) -> ClaimedBuffer:
         # these are cumulative - you can claim any number of spots here and then commit them later

@@ -35,6 +35,7 @@ class ArchiveSubscription:
 
         ArchiveConstants.archive_lib.archive_sub_close(self.subscription_handle)
         ArchiveConstants.archive_lib.archive_sub_destroy(self.subscription_handle)
+        self.subscription_handle = None
 
     def poll_subscription(self, callback):
         if self.subscription_handle is None:
