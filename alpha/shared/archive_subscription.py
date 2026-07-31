@@ -1,5 +1,7 @@
 
 import os
+
+
 from alpha.shared.archive_constants import ArchiveConstants
 
 
@@ -19,7 +21,7 @@ class ArchiveSubscription:
 
         file_name = os.path.join(ArchiveConstants.DEFAULT_SHM_PATH, self.shm_name)
         self.subscription_handle = ArchiveConstants.archive_lib.archive_sub_create(file_name.encode("utf-8"), shm_size, self.name.encode("utf-8"))
-        print(f"python: got new subscription handle {self.subscription_handle} at file '{file_name}'")
+        print(f"python: got new subscription handle {self.subscription_handle} at file '{file_name}' for '{self.name}'")
 
     def subscription_status(self) -> bool:
         if self.subscription_handle == None:

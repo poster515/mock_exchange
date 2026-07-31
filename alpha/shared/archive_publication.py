@@ -21,7 +21,7 @@ class ArchivePublication:
 
         file_name = os.path.join(ArchiveConstants.DEFAULT_SHM_PATH, self.shm_name)
         self.publication_handle = ArchiveConstants.archive_lib.archive_pub_create(file_name.encode("utf-8"), shm_size, self.name.encode("utf-8"))
-        print(f"python: got new publication handle {self.publication_handle} at file '{file_name}'")
+        print(f"python: got new publication handle {self.publication_handle} at file '{file_name}' for '{self.name}'")
 
     def publication_status(self) -> bool:
         if self.publication_handle == None:

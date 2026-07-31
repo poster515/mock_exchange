@@ -35,7 +35,7 @@ namespace archive {
         void poll(ConsumerCallback handler) {
             auto reader = queue->poll_buffer();
             if (!reader.has_value()) {
-                spdlog::warn("Did not receive any data for agent {}", queue->name());
+                spdlog::warn("[] Did not receive any data for agent", queue->name());
                 return;
             }
             const auto bytes = reader->get_as_view<std::span<const std::byte>, std::byte>();

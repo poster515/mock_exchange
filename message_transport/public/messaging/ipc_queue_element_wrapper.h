@@ -16,13 +16,13 @@ namespace message_transport {
     class IpcQueueRaiiWrapper
     {
     public:
-        IpcQueueRaiiWrapper(uint8_t* buffer, size_t buffer_size)
+        IpcQueueRaiiWrapper(std::byte* buffer, size_t buffer_size)
             : wrapper(buffer, buffer_size) {}
 
         ~IpcQueueRaiiWrapper() = default;
 
     protected:
-        std::span<uint8_t> wrapper;
+        std::span<std::byte> wrapper;
     };
 
     /**
@@ -38,7 +38,7 @@ namespace message_transport {
     class IpcQueueRaiiReaderWrapper : public IpcQueueRaiiWrapper
     {
     public:
-        IpcQueueRaiiReaderWrapper(uint8_t* buffer, size_t buffer_size, IpcQueue& queue)
+        IpcQueueRaiiReaderWrapper(std::byte* buffer, size_t buffer_size, IpcQueue& queue)
             : IpcQueueRaiiWrapper(buffer, buffer_size)
             , queue(queue) {}
 
@@ -48,7 +48,7 @@ namespace message_transport {
             : IpcQueueRaiiWrapper(other.wrapper.data(), other.wrapper.size())
             , queue(other.queue) {
             // need to relinquish the other wrapper of its resources/ownership
-            other.wrapper = std::span<uint8_t>();
+            other.wrapper = std::span<std::byte>();
             other.released = true;
         }
         IpcQueueRaiiReaderWrapper& operator=(IpcQueueRaiiReaderWrapper&& other) = delete;
@@ -113,7 +113,7 @@ namespace message_transport {
     class IpcQueueRaiiWriterWrapper : public IpcQueueRaiiWrapper
     {
     public:
-        IpcQueueRaiiWriterWrapper(uint8_t* buffer, size_t buffer_size)
+        IpcQueueRaiiWriterWrapper(std::byte* buffer, size_t buffer_size)
             : IpcQueueRaiiWrapper(buffer, buffer_size) {}
 
         // useful for container operations (emplace_back, etc)
@@ -140,7 +140,7 @@ namespace message_transport {
         }
 
         std::span<std::byte> get_as_span() {
-            return std::as_writable_bytes(this->wrapper);
+            return this->wrapper.subspan(sizeof(MessageHeader));
         }
     };
 }

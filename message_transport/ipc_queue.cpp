@@ -46,7 +46,7 @@ namespace message_transport {
 
         if (!is_writer) {
             const auto result = modify_readers(true);
-            spdlog::info("Num_readers now {}, starting read at offset {}", result.num_readers, result.write_offset);
+            spdlog::info("[{}] Num_readers now {}, starting read at offset {}", agent_name, result.num_readers, result.write_offset);
             abs_read_offset = result.write_offset;
         }
         else global_header->write_fields.num_writers.fetch_add(1);
@@ -202,8 +202,8 @@ namespace message_transport {
         new_message_header->num_readers.store(wrapper.num_readers, std::memory_order_release);
 
         global_header->write_fields.message_count.fetch_add(1, std::memory_order_relaxed);
-        spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
-        return IpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
+        // spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
+        return IpcQueueRaiiWriterWrapper(reinterpret_cast<std::byte*>(new_buffer_ptr), total_message_len);
     }
 
     std::optional<IpcQueueRaiiReaderWrapper> IpcQueue::poll_buffer() {
@@ -216,11 +216,14 @@ namespace message_transport {
         auto* message_header = static_cast<MessageHeader*>(buffer_ptr);
         auto block_state = message_header->commit_flag.load(std::memory_order_acquire);
 
+        // spdlog::info("[{}] polling {} and got {} state", agent_name, abs_read_offset, static_cast<uint8_t>(block_state));
+
         switch (block_state) {
             case CommitFlag::READY_FOR_CONSUMER: {
 
                 const auto abs_block_offset = message_header->abs_offset;
                 if (abs_read_offset != message_header->abs_offset) {
+                    // spdlog::info("[{}] block offset {} not equal to expected offset {}", agent_name, abs_block_offset, abs_read_offset);
                     return std::nullopt;
                 }
 
@@ -237,7 +240,7 @@ namespace message_transport {
                 // tell the producer that we've leased this message for reading, which will prevent the producer from overwriting this message until we've released it after we're done reading.
                 ++read_message_cnt;
                 // spdlog::info("[{}] Polled message at offset {} with size {}, bytes (total size with header: {} bytes)", agent_name, abs_read_offset, message_header->message_size, total_message_len);
-                return IpcQueueRaiiReaderWrapper(reinterpret_cast<uint8_t*>(buffer_ptr), total_message_len, *this);
+                return IpcQueueRaiiReaderWrapper(reinterpret_cast<std::byte*>(buffer_ptr), total_message_len, *this);
             }
             case CommitFlag::NOT_READY:
             default: {

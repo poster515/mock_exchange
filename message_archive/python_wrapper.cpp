@@ -8,7 +8,7 @@ extern "C" {
     void archive_force_close(const char* queue_name) {
         spdlog::info("Attempting to unlink/force close archive {}...", queue_name);
         if (shm_unlink(queue_name) == -1) {
-            spdlog::error(
+            spdlog::warn(
                 "shm_unlink({}) failed: {} (errno={})",
                 queue_name,
                 std::strerror(errno),
@@ -58,7 +58,8 @@ extern "C" {
         delete pub;
     }
 
-    void* archive_sub_create(const char* queue_name, size_t queue_size, const char* name) {
+    archive::ArchiveSubscription* archive_sub_create(const char* queue_name, size_t queue_size, const char* name) {
+        spdlog::info("Attempting to create new subscription on {} for agent '{}' (size {})", queue_name, name, queue_size);
         return new archive::ArchiveSubscription(
             archive::ArchiveSubscription::ArchiveSubscriptionParams {
                 .queue_params = message_transport::IpcQueue::IpcQueueParameters {
@@ -83,9 +84,6 @@ extern "C" {
 
     void archive_sub_poll(void* ptr, uint8_t(*handler)(const uint8_t*, size_t)) {
         try {
-            printf("archive_sub_poll\n");
-            printf("ptr=%p\n", ptr);
-            printf("handler=%p\n", (void*)handler);
             auto* sub = reinterpret_cast<archive::ArchiveSubscription*>(ptr);
             sub->poll(handler);
         } catch (...) {
