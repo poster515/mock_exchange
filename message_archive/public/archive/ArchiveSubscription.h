@@ -34,9 +34,11 @@ namespace archive {
         // I would have preferred something that can use std::spans here but alas.
         void poll(ConsumerCallback handler) {
             auto reader = queue->poll_buffer();
-            const auto bytes = reader.has_value() ?
-                reader->get_as_view<std::span<const std::byte>, std::byte>() : std::span<const std::byte>{};
-
+            if (!reader.has_value()) {
+                spdlog::warn("Did not receive any data for agent {}", queue->name());
+                return;
+            }
+            const auto bytes = reader->get_as_view<std::span<const std::byte>, std::byte>();
             const uint8_t* casted = reinterpret_cast<const uint8_t*>(bytes.data());
             const size_t len = bytes.size_bytes();
             const auto code = static_cast<FragmentAction>(handler(casted, len));

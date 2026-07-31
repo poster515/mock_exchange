@@ -1,5 +1,6 @@
 from ctypes import *
 from enum import IntEnum
+import os
 
 
 # =============================================================================
@@ -7,6 +8,7 @@ from enum import IntEnum
 # =============================================================================
 
 class MessageHeader(Structure):
+    _layout_ = "ms"
     _pack_ = 1
     _fields_ = [
         ("blockLength", c_uint16),
@@ -34,13 +36,13 @@ class TimeInForce(IntEnum):
     Day = 0
     IOC = 3
 
-
 # =============================================================================
 # Messages
 # =============================================================================
 
 class NewOrderSingle(Structure):
     TEMPLATE_ID = 1
+    _layout_ = "ms"
     _pack_ = 1
     _fields_ = [
         ("header",       MessageHeader),
@@ -57,6 +59,7 @@ class NewOrderSingle(Structure):
 
 class CancelOrder(Structure):
     TEMPLATE_ID = 2
+    _layout_ = "ms"
     _pack_ = 1
     _fields_ = [
         ("header",  MessageHeader),
@@ -68,6 +71,7 @@ class CancelOrder(Structure):
 
 class ReplaceOrder(Structure):
     TEMPLATE_ID = 3
+    _layout_ = "ms"
     _pack_ = 1
     _fields_ = [
         ("header",          MessageHeader),

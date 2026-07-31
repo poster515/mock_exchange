@@ -5,9 +5,10 @@ from alpha.shared.archive_constants import ArchiveConstants
 
 class ArchiveSubscription:
 
-    def __init__(self, shm_name: str):
+    def __init__(self, shm_name: str, agent_name: str):
         self.subscription_handle = None
         self.shm_name = shm_name
+        self.name = agent_name
 
     def __del__(self):
         self.subscription_close()
@@ -17,8 +18,8 @@ class ArchiveSubscription:
         self.subscription_close()
 
         file_name = os.path.join(ArchiveConstants.DEFAULT_SHM_PATH, self.shm_name)
-        self.subscription_handle = ArchiveConstants.archive_lib.archive_sub_create(file_name.encode("utf-8"), shm_size)
-        print(f"python: got new handle {self.subscription_handle}")
+        self.subscription_handle = ArchiveConstants.archive_lib.archive_sub_create(file_name.encode("utf-8"), shm_size, self.name.encode("utf-8"))
+        print(f"python: got new subscription handle {self.subscription_handle} at file '{file_name}'")
 
     def subscription_status(self) -> bool:
         if self.subscription_handle == None:

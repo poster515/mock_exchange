@@ -1,6 +1,6 @@
 .vscode/
 build/
-
+**/__pycache__/*
 *.jar
 **/generated/*
 **/CMakeUserPresets.json

@@ -10,7 +10,7 @@ import platform
 from alpha.shared.archive_messages import OrderType, OrderSide
 
 MessageCallback = ctypes.CFUNCTYPE(
-    ctypes.c_int,                       # return type
+    ctypes.c_ubyte,                     # return type
     ctypes.POINTER(ctypes.c_ubyte),     # uint8_t*
     ctypes.c_size_t                     # size_t
 )
@@ -39,36 +39,39 @@ class ArchiveConstants:
     TARGET_EXTENSION = "dylib" if "macOS" in platform.platform() else "so"
     archive_lib = ctypes.CDLL(os.path.join(INSTALL_PATH, f"libarchive_shared.{TARGET_EXTENSION}"))
 
-    # SUBSCRIPTION
-    archive_lib.archive_sub_create.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
-    archive_lib.archive_sub_create.restype = ctypes.POINTER(ctypes.c_void_p)
-
-    archive_lib.archive_sub_close.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    archive_lib.archive_force_close.argtypes = [ctypes.c_char_p]
     archive_lib.archive_sub_close.restype = None
 
-    archive_lib.archive_sub_is_ready.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    # SUBSCRIPTION
+    archive_lib.archive_sub_create.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p]
+    archive_lib.archive_sub_create.restype = ctypes.c_void_p
+
+    archive_lib.archive_sub_close.argtypes = [ctypes.c_void_p]
+    archive_lib.archive_sub_close.restype = None
+
+    archive_lib.archive_sub_is_ready.argtypes = [ctypes.c_void_p]
     archive_lib.archive_sub_is_ready.restype = None
 
-    archive_lib.archive_sub_poll.argtypes = [ctypes.POINTER(ctypes.c_void_p), MessageCallback]
+    archive_lib.archive_sub_poll.argtypes = [ctypes.c_void_p, MessageCallback]
     archive_lib.archive_sub_poll.restype = None
 
-    archive_lib.archive_sub_destroy.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    archive_lib.archive_sub_destroy.argtypes = [ctypes.c_void_p]
     archive_lib.archive_sub_destroy.restype = None
 
     # PUBLICATIONS
-    archive_lib.archive_pub_create.argtypes = [ctypes.c_char_p, ctypes.c_size_t]
-    archive_lib.archive_pub_create.restype = ctypes.POINTER(ctypes.c_void_p)
+    archive_lib.archive_pub_create.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p]
+    archive_lib.archive_pub_create.restype = ctypes.c_void_p
 
-    archive_lib.archive_pub_close.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    archive_lib.archive_pub_close.argtypes = [ctypes.c_void_p]
     archive_lib.archive_pub_close.restype = None
 
-    archive_lib.archive_pub_destroy.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    archive_lib.archive_pub_destroy.argtypes = [ctypes.c_void_p]
     archive_lib.archive_pub_destroy.restype = None
 
-    archive_lib.archive_pub_claim.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t]
+    archive_lib.archive_pub_claim.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
     archive_lib.archive_pub_claim.restype = ctypes.POINTER(ctypes.c_uint8)
 
-    archive_lib.archive_pub_commit.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    archive_lib.archive_pub_commit.argtypes = [ctypes.c_void_p]
     archive_lib.archive_pub_commit.restype = ctypes.c_size_t
 
     DEFAULT_SHM_PATH = Path("/")

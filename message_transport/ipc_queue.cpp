@@ -25,6 +25,8 @@ namespace message_transport {
             throw std::runtime_error("Queue size exceeds maximum allowed size of " + std::to_string(MAX_QUEUE_SIZE_BYTES) + " bytes");
         } else if (!IpcQueue::is_power_of_two(available_queue_size_bytes)) {
             throw std::runtime_error("Queue size is not a power of 2! Please revise.");
+        } else {
+            spdlog::info("Attempting to open/create file '{}' for agent '{}' with size {}", file_name, agent_name, available_queue_size_bytes);
         }
 
         // assume file exists already and we are simply opening it
@@ -64,6 +66,7 @@ namespace message_transport {
     }
 
     void IpcQueue::init_new_file() {
+        spdlog::info("Creating new shared memory file for agent: {}, total size: {}", agent_name, queue_size_bytes);
         std::ignore = ftruncate(fd, queue_size_bytes);
         void* ptr = mmap(nullptr, queue_size_bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
@@ -86,6 +89,7 @@ namespace message_transport {
     }
 
     void IpcQueue::validate_settings() {
+        spdlog::info("Validating settings from agent: {}", agent_name);
         void* ptr = mmap(nullptr, sizeof(GlobalHeader), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         global_header = static_cast<GlobalHeader*>(ptr);
 
@@ -169,6 +173,8 @@ namespace message_transport {
             throw std::runtime_error(std::format("Message size {} bytes exceeds the total queue capacity of {} bytes", size, available_queue_size_bytes));
         } else if (size == 0) {
             throw std::runtime_error("Cannot claim buffer for message with size 0 bytes");
+        } else {
+            // spdlog::info("[{}] attempting to claim buffer with size {}", agent_name, size);
         }
 
         // only allow committing if we can buffer an extra message at the end of the queue
@@ -196,7 +202,7 @@ namespace message_transport {
         new_message_header->num_readers.store(wrapper.num_readers, std::memory_order_release);
 
         global_header->write_fields.message_count.fetch_add(1, std::memory_order_relaxed);
-        // spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
+        spdlog::info("[{}] Claimed offset {} with total size {} bytes (bytes at end {}, total avail {})", agent_name, wrapper.write_offset, total_message_len, bytes_remaining_at_end, available_queue_size_bytes);
         return IpcQueueRaiiWriterWrapper(reinterpret_cast<uint8_t*>(new_buffer_ptr), total_message_len);
     }
 

@@ -96,6 +96,8 @@ namespace message_transport {
         size_t num_readers(std::memory_order order = std::memory_order_acquire) const;
         void close();
 
+        std::string_view name() const { return agent_name; }
+
     private:
 
         // whether this instance is the writer or reader, used for managing the state of the
@@ -161,6 +163,10 @@ namespace message_transport {
                 WritePolicy::execute();
                 slowest_reader = global_header->read_fields.read_offset.load(std::memory_order_acquire);
                 must_wait = (wrapper.write_offset - slowest_reader) > available_queue_size_bytes;
+
+                // slowest: 0, expected: 1537
+
+                // spdlog::warn("[{}] waiting for reader to catch up, slowest: {}, expected: {}, available: {}", agent_name, slowest_reader, wrapper.write_offset, available_queue_size_bytes);
 
                 // TODO: check for slow reader here. If # readers hasn't changed in N seconds and queue is full drop their message.
             }

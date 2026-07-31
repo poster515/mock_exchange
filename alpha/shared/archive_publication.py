@@ -7,9 +7,10 @@ from alpha.shared.archive_buffer import ClaimedBuffer
 
 class ArchivePublication:
 
-    def __init__(self, shm_name: str):
+    def __init__(self, shm_name: str, agent_name: str):
         self.publication_handle = None
         self.shm_name = shm_name
+        self.name = agent_name
 
     def __del__(self):
         self.publication_close()
@@ -19,8 +20,8 @@ class ArchivePublication:
         self.publication_close()
 
         file_name = os.path.join(ArchiveConstants.DEFAULT_SHM_PATH, self.shm_name)
-        self.publication_handle = ArchiveConstants.archive_lib.archive_pub_create(file_name.encode("utf-8"), shm_size)
-        print(f"python: got new handle {self.publication_handle}")
+        self.publication_handle = ArchiveConstants.archive_lib.archive_pub_create(file_name.encode("utf-8"), shm_size, self.name.encode("utf-8"))
+        print(f"python: got new publication handle {self.publication_handle} at file '{file_name}'")
 
     def publication_status(self) -> bool:
         if self.publication_handle == None:
@@ -32,6 +33,7 @@ class ArchivePublication:
         if self.publication_handle is None:
             return
 
+        print(f"python: deleting handle {self.publication_handle}")
         ArchiveConstants.archive_lib.archive_pub_close(self.publication_handle)
         ArchiveConstants.archive_lib.archive_pub_destroy(self.publication_handle)
 
@@ -45,7 +47,7 @@ class ArchivePublication:
 
 if __name__ == '__main__':
     archive = ArchivePublication()
-    archive.publication_open("archive_test", 1024)
+    archive.publication_open("archive_test", 4096)
 
     # tries = 0
     # while not archive.publication_status() and tries < 10:

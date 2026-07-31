@@ -28,6 +28,8 @@ namespace archive {
 
         void close();
 
+        std::string_view agent_name() const { return queue->name(); }
+
     private:
         std::unique_ptr<message_transport::IpcQueue> queue;
         std::deque<message_transport::IpcQueueRaiiWriterWrapper> to_commit;
