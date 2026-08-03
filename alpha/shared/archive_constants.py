@@ -84,5 +84,7 @@ class ArchiveConstants:
     MARKET_DATA_CTRL_RESP = "market_data_ctrl_resp"
     LEDGER_IN_QUEUE = "agent_to_ledger"
     LEDGER_OUT_QUEUE = "ledger_to_alpaca"
+    ADMIN_OUT_QUEUE = "admin_in"
+    ADMIN_IN_QUEUE = "admin_out"
 
     

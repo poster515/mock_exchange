@@ -87,9 +87,10 @@ class NewSymbolAdd(Structure):
     _layout_ = "ms"
     _pack_ = 1
     _fields_ = [
-        ("header",          MessageHeader),
-        ("symbolName",      c_char * 8),
-        ("symbolId",        c_uint64)
+        ("header",              MessageHeader),
+        ("symbolName",          c_char * 8),
+        ("symbolId",            c_uint64),
+        ("createTimeEpochNs",   c_uint64)
     ]
 
 # only really ever communicated between python clients

@@ -44,7 +44,7 @@ def test_archive_pub_and_sub():
 
     with writer.publication_claim(NewOrderSingle) as order:
         order.orderId = 1234
-        order.symbol = b"AAPL"
+        order.symbolId = 102030
         order.side = OrderSide.Buy
         order.orderQty = 10
         order.ordType = OrderType.Market
@@ -64,7 +64,7 @@ def test_archive_pub_and_sub():
 
         full_message = ctypes.cast(bytes, ctypes.POINTER(NewOrderSingle)).contents
         assert(full_message.orderId == 1234)
-        assert(full_message.symbol == b"AAPL")
+        assert(full_message.symbolId == 102030)
         assert(full_message.side == 1)
         assert(full_message.orderQty == 10)
         assert(full_message.ordType == 1)

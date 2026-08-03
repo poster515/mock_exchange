@@ -1,39 +1,54 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from alpha.shared.base_agent import BaseAgent
 from alpha.shared.archive_constants import *
 from alpha.shared.archive_messages import *
 from alpha.shared.archive_publication import ArchivePublication
 from alpha.shared.archive_subscription import ArchiveSubscription
+from alpha.shared.admin_client import AdminClient
 
-class AlpacaAgent(ABC):
-    """Generic base class for Alpaca trading agents."""
+class AlpacaAgent(BaseAgent):
+    """Generic base class for Alpaca trading agents.
     
-    def __init__(self, agent_name):
+    Subclasses must implement handle_admin_bytes(bytes, size) still.
+    """
+    
+    def __init__(self, agent_name: str):
+        super().__init__(agent_name)
+
         self.order_publication = None
         self.md_ctrl_publication = None
         self.md_ctrl_subscription = None
         self.md_subscription = None
-        self.name = agent_name
+
+        self._admin_client = AdminClient(self)
 
     def __del__(self):
+        self._admin_client.teardown()
         self.teardown()
 
     def start(self):
-        self.order_publication = ArchivePublication(ArchiveConstants.LEDGER_IN_QUEUE)
-        self.md_ctrl_publication = ArchivePublication(ArchiveConstants.MARKET_DATA_CTRL_RQST)
-        self.md_ctrl_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_CTRL_RESP)
-        self.md_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_QUEUE)
+        self.order_publication = ArchivePublication(ArchiveConstants.LEDGER_IN_QUEUE, super().name + "_ledger_in")
+        self.md_ctrl_publication = ArchivePublication(ArchiveConstants.MARKET_DATA_CTRL_RQST, super().name + "_md_ctrl_req")
+        self.md_ctrl_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_CTRL_RESP, super().name + "_md_ctrl_resp")
+        self.md_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_QUEUE, super().name + "_md_in")
 
         self.order_publication.publication_open(ArchiveConstants.DEFAULT_QUEUE_SIZE)
         self.md_ctrl_publication.publication_open(ArchiveConstants.DEFAULT_QUEUE_SIZE)
         self.md_ctrl_subscription.subscription_open(ArchiveConstants.DEFAULT_QUEUE_SIZE)
         self.md_subscription.subscription_open(ArchiveConstants.DEFAULT_QUEUE_SIZE)
 
+        self._admin_client.start()
+
     @abstractmethod
     def execute_strategy(self, epoch_sec: float) -> None:
         """Execute trading strategy."""
-        pass
+        self._admin_client.poll()
+
+    @property
+    def admin_client(self):
+        return self._admin_client
 
     def teardown(self):
         """Teardown this agent, including cancelling any resting orders """
@@ -48,7 +63,7 @@ class AlpacaAgent(ABC):
 
         match signal.action:
             case OrderAction.NEW:
-                with super().order_publication.publication_claim(NewOrderSingle) as order:
+                with self.order_publication.publication_claim(NewOrderSingle) as order:
                     order.orderId = signal.client_order_id
                     order.symbol = signal.symbol
                     order.side = signal.side
@@ -57,8 +72,8 @@ class AlpacaAgent(ABC):
                     order.priceFactor = signal.price_factor
                 return True
 
-            case OrderAction.CANCEL_REPLACE:
-                with super().order_publication.publication_claim(CancelOrder) as order:
+            case OrderAction.REPLACE:
+                with self.order_publication.publication_claim(CancelOrder) as order:
                     order.orderId = signal.client_order_id
                     order.symbol = signal.symbol
                     order.side = signal.side
@@ -68,7 +83,7 @@ class AlpacaAgent(ABC):
                 return True
 
             case OrderAction.CANCEL:
-                with super().order_publication.publication_claim(ReplaceOrder) as order:
+                with self.order_publication.publication_claim(ReplaceOrder) as order:
                     order.orderId = signal.client_order_id
                     order.symbol = signal.symbol
                     order.side = signal.side
