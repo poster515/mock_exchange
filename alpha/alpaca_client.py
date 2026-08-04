@@ -10,13 +10,14 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 
+from alpha.shared.base_agent import BaseAgent
 from alpha.shared.archive_messages import *
 from alpha.shared.archive_constants import ArchiveConstants
 from alpha.shared.archive_publication import ArchivePublication
 from alpha.shared.archive_subscription import ArchiveSubscription
 
 
-class MarketDataClient:
+class MarketDataClient(BaseAgent):
     """Client for querying Alpaca market data and publishing to archive."""
 
     DEFAULT_BATCH_SIZE = 10 # batch size when polling subscriptions
@@ -194,7 +195,7 @@ class MarketDataClient:
         print(f"Received market data control request from {full_message.agentName}")
         symbolName = ctypes.string_at(full_message.symbolNam, ctypes.sizeof(full_message.symbolName))
         symbolId = full_message.symbolId
-        if ()
+        
 
 
 if __name__ == "__main__":

@@ -30,29 +30,29 @@ extern "C" {
     }
 
     bool archive_pub_is_ready(archive::ArchivePublication* pub) {
-        spdlog::info("Attempting to get archive readiness for {}", pub->agent_name());
+        spdlog::info("Attempting to get archive readiness for agent: '{}'", pub->agent_name());
         return pub->is_ready();
     }
 
     uint8_t* archive_pub_claim(archive::ArchivePublication* pub, size_t size) {
-        spdlog::info("Claiming {} bytes for publication {}", size, pub->agent_name());
+        spdlog::info("Claiming {} bytes for publication agent: '{}'", size, pub->agent_name());
         std::byte* data = pub->claim_buffer(size).data();
         uint8_t* p = reinterpret_cast<uint8_t*>(data);
         return p;
     }
 
     size_t archive_pub_commit(archive::ArchivePublication* pub) {
-        spdlog::info("Committing messages from publication {}", pub->agent_name());
+        spdlog::info("Committing messages from agent: '{}'", pub->agent_name());
         return pub->commit();
     }
 
     void archive_pub_close(archive::ArchivePublication* pub) {
-        spdlog::info("Closing publication from {}", pub->agent_name());
+        spdlog::info("Closing publication from agent: '{}'", pub->agent_name());
         pub->close();
     }
 
     void archive_pub_destroy(archive::ArchivePublication* pub) {
-        spdlog::info("Deleting publication from {}", pub->agent_name());
+        spdlog::info("Deleting publication from agent: '{}'", pub->agent_name());
         delete pub;
     }
 

@@ -22,22 +22,17 @@ class AlpacaAgent(BaseAgent):
         self.md_ctrl_subscription = None
         self.md_subscription = None
 
-        self._admin_client = AdminClient(self)
+        self._admin_client = AdminClient(super())
 
     def __del__(self):
         self._admin_client.teardown()
         self.teardown()
 
     def start(self):
-        self.order_publication = ArchivePublication(ArchiveConstants.LEDGER_IN_QUEUE, super().name + "_ledger_in")
-        self.md_ctrl_publication = ArchivePublication(ArchiveConstants.MARKET_DATA_CTRL_RQST, super().name + "_md_ctrl_req")
-        self.md_ctrl_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_CTRL_RESP, super().name + "_md_ctrl_resp")
-        self.md_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_QUEUE, super().name + "_md_in")
-
-        self.order_publication.publication_open(ArchiveConstants.DEFAULT_QUEUE_SIZE)
-        self.md_ctrl_publication.publication_open(ArchiveConstants.DEFAULT_QUEUE_SIZE)
-        self.md_ctrl_subscription.subscription_open(ArchiveConstants.DEFAULT_QUEUE_SIZE)
-        self.md_subscription.subscription_open(ArchiveConstants.DEFAULT_QUEUE_SIZE)
+        self.order_publication = ArchivePublication(ArchiveConstants.LEDGER_IN_QUEUE, super())
+        self.md_ctrl_publication = ArchivePublication(ArchiveConstants.MARKET_DATA_CTRL_RQST, super())
+        self.md_ctrl_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_CTRL_RESP, super())
+        self.md_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_QUEUE, super())
 
         self._admin_client.start()
 

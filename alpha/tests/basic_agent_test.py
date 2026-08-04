@@ -1,5 +1,6 @@
 import ctypes
 
+from alpha.shared.base_agent import BaseAgent
 from alpha.shared.archive_constants import ArchiveConstants
 from alpha.shared.archive_publication import ArchivePublication
 from alpha.shared.archive_subscription import ArchiveSubscription
@@ -8,16 +9,24 @@ from alpha.shared.archive_constants import MessageCallback
 
 QUEUE_SIZE = 4096
 
+class DummyAgent(BaseAgent):
+    def __init__(self, name: str):
+        super().__init__(name)
+
+    def handle_admin_bytes(bytes, size):
+        pass
+
+
 def test_hello():
     print("inside python test")
     assert(True)
 
 def test_archive_pub():
     print("inside archive pub test")
+    dummy = DummyAgent("dummy")
     ArchiveConstants.archive_lib.archive_force_close("/test_archive".encode("utf-8"))
 
-    archive = ArchivePublication("test_archive", "archive_pub_test")
-    archive.publication_open(QUEUE_SIZE)
+    archive = ArchivePublication("test_archive", dummy)
 
     with archive.publication_claim(NewOrderSingle) as order:
         order.orderId = 1234
@@ -28,19 +37,19 @@ def test_archive_pub():
         order.priceFactor = 100000
 
 def test_archive_sub():
+    dummy = DummyAgent("dummy")
     print("inside archive sub test")
     ArchiveConstants.archive_lib.archive_force_close("/test_archive".encode("utf-8"))
-    archive = ArchiveSubscription("test_archive", "archive_sub_test")
-    archive.subscription_open(QUEUE_SIZE)
+    archive = ArchiveSubscription("test_archive", dummy)
 
 def test_archive_pub_and_sub():
     print("inside pub and sub test")
+    dummy = DummyAgent("dummy")
+    dummy2 = DummyAgent("dummy2")
     ArchiveConstants.archive_lib.archive_force_close("/test_archive".encode("utf-8"))
 
-    writer = ArchivePublication("test_archive", "archive_pub_sub_test_writer")
-    writer.publication_open(QUEUE_SIZE)
-    reader = ArchiveSubscription("test_archive", "archive_pub_sub_test_reader")
-    reader.subscription_open(QUEUE_SIZE)
+    writer = ArchivePublication("test_archive", dummy)
+    reader = ArchiveSubscription("test_archive", dummy2)
 
     with writer.publication_claim(NewOrderSingle) as order:
         order.orderId = 1234

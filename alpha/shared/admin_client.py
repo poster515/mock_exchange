@@ -17,7 +17,7 @@ class AdminClient:
     """
     def __init__(self, agent: BaseAgent):
         self.owning_agent: BaseAgent = agent
-        self._symbol_mapping: Dict[str, np.uint64]
+        self._symbol_mapping: Dict[str, np.uint64] = {}
         self._admin_subscription = None
         self._admin_publication = None
 
@@ -39,8 +39,8 @@ class AdminClient:
         return self._admin_publication
 
     def start(self):
-        self._admin_publication = ArchivePublication(ArchiveConstants.ADMIN_OUT_QUEUE, self.owning_agent.name + "_admin_writer")
-        self._admin_subscription = ArchiveSubscription(ArchiveConstants.ADMIN_IN_QUEUE, self.owning_agent.name + "_admin_reader")
+        self._admin_publication = ArchivePublication(ArchiveConstants.ADMIN_QUEUE, self.owning_agent)
+        self._admin_subscription = ArchiveSubscription(ArchiveConstants.ADMIN_QUEUE, self.owning_agent)
 
     def teardown(self):
         pass
@@ -48,15 +48,16 @@ class AdminClient:
     def poll(self):
         self._admin_subscription.poll_subscription(self._admin_callback)
 
-    def _handle_admin_inputs(self, bytes, size):
+    def _handle_admin_inputs(self, bytes, size) -> int:
         print(f"AdminClient received {size} bytes from poll: {bytes} for agent: {self.owning_agent.name}")
         assert(size >= ctypes.sizeof(MessageHeader))
 
         header = ctypes.cast(bytes, ctypes.POINTER(MessageHeader)).contents
         if header.templateId == NewSymbolAdd.TEMPLATE_ID:
             full_message = ctypes.cast(bytes, ctypes.POINTER(NewSymbolAdd)).contents
+            print(f"Got new symbol add: {full_message}")
 
-            symbol_name = ctypes.create_string_buffer(full_message.symbolName, ctypes.sizeof(full_message.symbolName))
+            symbol_name = full_message.symbolName.decode("ascii").rstrip("\x00")
             symbol_id = full_message.symbolId
 
             if symbol_name in self._symbol_mapping.keys() and self._symbol_mapping[symbol_name] != symbol_id:
@@ -65,6 +66,7 @@ class AdminClient:
                 print(f"{self.owning_agent.name} got new symbol add: {symbol_name} = {symbol_id}")
 
             self._symbol_mapping[symbol_name] = symbol_id
-
+            return 0
         else:
-            self.owning_agent.handle_admin_bytes(bytes, size)
+            print(f"Unknown template ID: {header.templateId}, passing to owning_agent...")
+            return self.owning_agent.handle_admin_bytes(bytes, size)
