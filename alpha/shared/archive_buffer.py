@@ -15,7 +15,7 @@ class ClaimedBuffer:
     def __enter__(self):
 
         size = sizeof(self._message_type)
-        print(f"Attempting to claim {size} bytes from queue...")
+        # print(f"Attempting to claim {size} bytes from queue...")
         self._ptr = ArchiveConstants.archive_lib.archive_pub_claim(self._pub, size)
 
         self._msg = cast(

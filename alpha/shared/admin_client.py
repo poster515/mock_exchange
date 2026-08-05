@@ -14,6 +14,11 @@ class AdminClient:
     """
     Responsible for handling admin messages e.g., new symbol adds. This class handles some things
     but it should be given an agent that can handle other more nuanced commands.
+
+    _Most_ clients will and should not be able to or want to publish to the admin channel, but for
+    convenience sake its easier to give this guy a publisher AND subscriber.
+
+    YOU MUST POLL THIS OBJECT TO PROGRESS THE READER.
     """
     def __init__(self, agent: BaseAgent):
         self.owning_agent: BaseAgent = agent

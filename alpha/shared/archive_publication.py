@@ -10,23 +10,26 @@ class ArchivePublication:
 
     def __init__(self, shm_name: str, agent: BaseAgent, shm_size = ArchiveConstants.DEFAULT_QUEUE_SIZE):
         self.publication_handle = None
-        self.shm_name = shm_name
         self.owning_agent: BaseAgent = agent
         self.shm_size = shm_size
+        self._file_name = os.path.join(ArchiveConstants.DEFAULT_SHM_PATH, shm_name)
 
         self.publication_open(self.shm_size)
 
     def __del__(self):
         self.publication_close()
 
+    @property
+    def file_name(self):
+        return self._file_name
+
     def publication_open(self, shm_size: int):
         # first close any open publication we may already have
         self.publication_close()
 
         agent_name = self.owning_agent.name
-        file_name = os.path.join(ArchiveConstants.DEFAULT_SHM_PATH, self.shm_name)
-        self.publication_handle = ArchiveConstants.archive_lib.archive_pub_create(file_name.encode("utf-8"), shm_size, agent_name.encode("utf-8"))
-        print(f"python: got new publication handle {self.publication_handle} at file '{file_name}' for '{agent_name}'")
+        self.publication_handle = ArchiveConstants.archive_lib.archive_pub_create(self._file_name.encode("utf-8"), shm_size, agent_name.encode("utf-8"))
+        print(f"python: got new publication handle {self.publication_handle} at file '{self._file_name}' for '{agent_name}'")
 
     def publication_status(self) -> bool:
         if self.publication_handle == None:
@@ -45,6 +48,8 @@ class ArchivePublication:
     def publication_claim(self, message_type: Any) -> ClaimedBuffer:
         # these are cumulative - you can claim any number of spots here and then commit them later
         # EXCEPT when using these in a with...as loop. ClaimedBuffer will auto-commit upon exiting.
+
+        # THIS WILL BLOCK IF NO SPACE AVAILABLE ON MESSAGE BUFFER
         return ClaimedBuffer(self.publication_handle, message_type)
 
     def publication_commit(self) -> int:

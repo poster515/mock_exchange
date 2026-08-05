@@ -35,14 +35,14 @@ extern "C" {
     }
 
     uint8_t* archive_pub_claim(archive::ArchivePublication* pub, size_t size) {
-        spdlog::info("Claiming {} bytes for publication agent: '{}'", size, pub->agent_name());
+        // spdlog::info("Claiming {} bytes for publication agent: '{}'", size, pub->agent_name());
         std::byte* data = pub->claim_buffer(size).data();
         uint8_t* p = reinterpret_cast<uint8_t*>(data);
         return p;
     }
 
     size_t archive_pub_commit(archive::ArchivePublication* pub) {
-        spdlog::info("Committing messages from agent: '{}'", pub->agent_name());
+        // spdlog::info("Committing messages from agent: '{}'", pub->agent_name());
         return pub->commit();
     }
 
