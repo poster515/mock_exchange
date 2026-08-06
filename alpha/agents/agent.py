@@ -22,7 +22,7 @@ class AlpacaAgent(BaseAgent):
         self.md_ctrl_subscription = None
         self.md_subscription = None
 
-        self._admin_client = AdminClient(super())
+        self._admin_client = AdminClient(self)
 
     def __del__(self):
         self._admin_client.teardown()

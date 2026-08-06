@@ -11,5 +11,9 @@ class BaseAgent(ABC):
         return self._name
 
     @abstractmethod
-    def handle_admin_bytes(bytes, size):
+    def handle_admin_bytes(self, bytes, size):
+        pass
+
+    @abstractmethod
+    def handle_shutdown(self, reason: str):
         pass

@@ -15,9 +15,11 @@ class DummyAgent(BaseAgent):
     def __init__(self, name: str):
         super().__init__(name)
 
-    def handle_admin_bytes(bytes, size):
+    def handle_admin_bytes(self, bytes, size):
         pass
 
+    def handle_shutdown(self, reason):
+        pass
 
 def test_hello():
     print("inside python test")

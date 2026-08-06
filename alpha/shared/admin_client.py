@@ -58,20 +58,45 @@ class AdminClient:
         assert(size >= ctypes.sizeof(MessageHeader))
 
         header = ctypes.cast(bytes, ctypes.POINTER(MessageHeader)).contents
-        if header.templateId == NewSymbolAdd.TEMPLATE_ID:
-            full_message = ctypes.cast(bytes, ctypes.POINTER(NewSymbolAdd)).contents
-            print(f"Got new symbol add: {full_message}")
 
-            symbol_name = full_message.symbolName.decode("ascii").rstrip("\x00")
-            symbol_id = full_message.symbolId
+        match header.templateId:
+            case NewSymbolAdd.TEMPLATE_ID:
+                full_message = ctypes.cast(bytes, ctypes.POINTER(NewSymbolAdd)).contents
+                print(f"Got new symbol add: {full_message}")
 
-            if symbol_name in self._symbol_mapping.keys() and self._symbol_mapping[symbol_name] != symbol_id:
-                print(f"{self.owning_agent.name} got conflicting symbol add, new id: {symbol_name} = {symbol_id} (old = {self.symbol_mapping[symbol_name]}")
-            else:
-                print(f"{self.owning_agent.name} got new symbol add: {symbol_name} = {symbol_id}")
+                symbol_name = full_message.symbolName.decode("ascii").rstrip("\x00")
+                symbol_id = full_message.symbolId
 
-            self._symbol_mapping[symbol_name] = symbol_id
-            return 0
-        else:
-            print(f"Unknown template ID: {header.templateId}, passing to owning_agent...")
-            return self.owning_agent.handle_admin_bytes(bytes, size)
+                if symbol_name in self._symbol_mapping.keys() and self._symbol_mapping[symbol_name] != symbol_id:
+                    print(f"{self.owning_agent.name} got conflicting symbol add, new id: {symbol_name} = {symbol_id} (old = {self.symbol_mapping[symbol_name]}")
+                else:
+                    print(f"{self.owning_agent.name} got new symbol add: {symbol_name} = {symbol_id}")
+
+                self._symbol_mapping[symbol_name] = symbol_id
+                return 0
+
+            case AgentShutdown.TEMPLATE_ID:
+                full_message = ctypes.cast(bytes, ctypes.POINTER(AgentShutdown)).contents
+                agent_name = full_message.agentName.decode("ascii").rstrip("\x00")
+                reason = full_message.reason.decode("ascii").rstrip("\x00")
+
+                my_agent_name = self.owning_agent.name
+                if my_agent_name == agent_name:
+                    print(f"[{my_agent_name}] got shutdown signal for agent: {agent_name}, reason: '{reason}'")
+                    self.owning_agent.handle_shutdown(reason)
+                else:
+                    print(f"[{my_agent_name}] got shutdown signal for another agent: {agent_name}, ignoring")
+                return 0
+
+            case AllAgentsShutdown.TEMPLATE_ID:
+                full_message = ctypes.cast(bytes, ctypes.POINTER(AllAgentsShutdown)).contents
+                reason = full_message.reason.decode("ascii").rstrip("\x00")
+
+                my_agent_name = self.owning_agent.name
+                print(f"[{my_agent_name}] got all shutdown signal for reason: '{reason}'")
+                self.owning_agent.handle_shutdown(reason)
+                return 0
+
+            case _:
+                print(f"Unknown template ID: {header.templateId}, passing to owning_agent...")
+                return self.owning_agent.handle_admin_bytes(bytes, size)

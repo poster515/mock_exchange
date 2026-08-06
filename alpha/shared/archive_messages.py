@@ -80,7 +80,8 @@ class ReplaceOrder(Structure):
         ("newPrice",        c_int32),
         ("newPriceFactor",  c_int32),
     ]
-
+#-------------------- Admin Messages ------------------------
+# sent from some kind of controller app - could be Ledger tbh not sure yet.
 
 class NewSymbolAdd(Structure):
     TEMPLATE_ID = 100
@@ -93,7 +94,27 @@ class NewSymbolAdd(Structure):
         ("createTimeEpochNs",   c_uint64)
     ]
 
-# only really ever communicated between python clients
+class AgentShutdown(Structure):
+    TEMPLATE_ID = 101
+    _layout_ = "ms"
+    _pack_ = 1
+    _fields_ = [
+        ("header",      MessageHeader),
+        ("agentName",   c_char * 32),
+        ("reason",      c_char * 32),
+    ]
+
+class AllAgentsShutdown(Structure):
+    TEMPLATE_ID = 102
+    _layout_ = "ms"
+    _pack_ = 1
+    _fields_ = [
+        ("header",      MessageHeader),
+        ("reason",      c_char * 32),
+    ]
+
+
+#-------------------- Market Data Messages ------------------------
 class MarketData(Structure):
     TEMPLATE_ID = 4
     _layout_ = "ms"
