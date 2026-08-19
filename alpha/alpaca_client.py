@@ -49,7 +49,7 @@ class MarketDataClient(BaseAgent):
         self.ctrl_publication = ArchivePublication(ArchiveConstants.MARKET_DATA_CTRL_RESP, "alpaca_client")
         self.ctrl_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_CTRL_RQST, "alpaca_client")
         self.ledger_subscription = ArchiveSubscription(ArchiveConstants.LEDGER_OUT_QUEUE, "alpaca_client")
-        self.admin_publication = ArchivePublication(ArchiveConstants.ADMIN_OUT_QUEUE, "alpaca_client")
+        self.admin_publication = ArchivePublication(ArchiveConstants.ADMIN_QUEUE, "alpaca_client")
 
         self.db_connection = sqlite3.connect(self.DEFAULT_DB_NAME, autocommit=True)
 

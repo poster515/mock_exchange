@@ -44,11 +44,14 @@ class AdminClient:
         return self._admin_publication
 
     def start(self):
-        self._admin_publication = ArchivePublication(ArchiveConstants.ADMIN_QUEUE, self.owning_agent)
-        self._admin_subscription = ArchiveSubscription(ArchiveConstants.ADMIN_QUEUE, self.owning_agent)
+        self._admin_publication = ArchivePublication(ArchiveConstants.ADMIN_IN_QUEUE, self.owning_agent.name)
+        self._admin_subscription = ArchiveSubscription(ArchiveConstants.ADMIN_QUEUE, self.owning_agent.name)
 
     def teardown(self):
-        pass
+        if self._admin_publication:
+            self._admin_publication.publication_close()
+        if self._admin_subscription:
+            self._admin_subscription.subscription_close()
 
     def poll(self):
         self._admin_subscription.poll_subscription(self._admin_callback)
@@ -77,7 +80,8 @@ class AdminClient:
 
             case AgentShutdown.TEMPLATE_ID:
                 full_message = ctypes.cast(bytes, ctypes.POINTER(AgentShutdown)).contents
-                agent_name = full_message.agentName.decode("ascii").rstrip("\x00")
+                agent_name = full_message.destAgentName.decode("ascii").rstrip("\x00")
+                agent_id = full_message.destAgentId
                 reason = full_message.reason.decode("ascii").rstrip("\x00")
 
                 my_agent_name = self.owning_agent.name

@@ -84,6 +84,7 @@ class ArchiveConstants:
     MARKET_DATA_CTRL_RESP = "market_data_ctrl_resp"
     LEDGER_IN_QUEUE = "agent_to_ledger"
     LEDGER_OUT_QUEUE = "ledger_to_alpaca"
-    ADMIN_QUEUE = "admin"   # kind of a weird construct - you write commands and read responses on same channel
+    ADMIN_QUEUE = "admin_out"       # response channel that admin publishes responses over - this is a party channel though
+    ADMIN_IN_QUEUE = "admin_in"     # request channel that agents use to request new symbols, request startup state, etc.
 
     

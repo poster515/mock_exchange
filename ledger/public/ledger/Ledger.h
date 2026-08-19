@@ -7,6 +7,7 @@
 
 #include <utils/Config.h>
 #include "archive/ArchiveSubscription.h"
+#include "archive/ArchivePublication.h"
 
 #include "sbe/generated/exchange_order/MessageHeader.h"
 #include "sbe/generated/exchange_order/NewOrderSingle.h"
@@ -28,7 +29,12 @@ namespace ledger {
      * 
      */
     class Ledger : public common::IApplicationService {
-        static constexpr size_t QUEUE_SIZE = 1 << 16;
+        static constexpr size_t DEFAULT_QUEUE_SIZE = 1 << 16;
+
+        static constexpr const char* AGENT_NAME = "LEDGER";
+        static constexpr const char* ORDER_ENTRY_QUEUE = "";
+        static constexpr const char* ADMIN_IN_QUEUE = "";
+        static constexpr const char* ADMIN_OUT_QUEUE = "";
 
     public:
         Ledger(common::CommonComponents&& components);
@@ -41,7 +47,9 @@ namespace ledger {
         archive::FragmentAction on_fragment(std::span<const std::byte> bytes);
 
     private:
-        std::unique_ptr<archive::ArchiveSubscription> subscription;
+        std::unique_ptr<archive::ArchiveSubscription> order_entry_subscription;
+        std::unique_ptr<archive::ArchiveSubscription> admin_subscription;
+        std::unique_ptr<archive::ArchivePublication> admin_publication;
 
         void process_new_order(const exchange::order::NewOrderSingle& order);
         void process_cancel_order(const exchange::order::CancelOrder& order);
