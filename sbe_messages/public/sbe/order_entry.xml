@@ -13,6 +13,8 @@
             <type name="templateId" primitiveType="uint16"/>
             <type name="schemaId" primitiveType="uint16"/>
             <type name="version" primitiveType="uint16"/>
+            <type name="timestamp" primitiveType="uint64"/>
+            <type name="srcAgentId" primitiveType="uint64"/>
         </composite>
 
         <enum name="Side" encodingType="uint8">
@@ -34,8 +36,11 @@
         <type name="price_factor" primitiveType="int32"/>
         <type name="qty" primitiveType="uint32"/>
         <type name="orderId" primitiveType="uint64"/>
-        <type name="symbol" primitiveType="char" length="8"/>
+        <type name="symbolName" primitiveType="char" length="8"/>
         <type name="symbolId" primitiveType="uint64"/>
+        <type name="timestamp" primitiveType="uint64"/>
+        <type name="agentName" primitiveType="char" length="64"/>
+        <type name="reason" primitiveType="char" length="64"/>
 
     </types>
 
@@ -67,8 +72,30 @@
     </message>
 
     <message name="NewSymbolAdd" id="100">
-        <field name="symbol" id="55" type="symbol"/>
+        <field name="symbolName" id="55" type="symbolName"/>
         <field name="symbolId" id="56" type="symbolId"/>
+        <field name="creationTs" id="57" type="timestamp"/>
+    </message>
+
+    <message name="AgentShutdown" id="101">
+        <field name="destAgentId" id="56" type="uint64"/>
+        <field name="destAgentName" id="58" type="agentName"/>
+        <field name="reason" id="57" type="reason"/>
+    </message>
+
+    <message name="AllAgentShutdown" id="102">
+        <field name="reason" id="57" type="reason"/>
+    </message>
+
+    <message name="AgentStartup" id="103">
+        <field name="srcAgentName" id="56" type="agentName"/>
+    </message>
+
+    <message name="AgentParams" id="104">
+        <field name="agentId" id="56" type="uint64"/>
+        <field name="totalCash" id="57" type="int32"/>
+        <field name="totalLossLimit" id="58" type="int32"/>
+        <field name="totalNotional" id="59" type="int32"/>
     </message>
 
 </sbe:messageSchema>

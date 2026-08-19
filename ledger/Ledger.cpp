@@ -1,5 +1,7 @@
 #include "ledger/Ledger.h"
 
+#include "sbe/generated/exchange_order/AgentStartup.h"
+
 namespace ledger {
 
     Ledger::Ledger(common::CommonComponents&& components)
@@ -10,19 +12,42 @@ namespace ledger {
     void Ledger::start() {
 
         // we want to spin up a poll runner and run in a worker thread.
-        subscription = std::make_unique<archive::ArchiveSubscription>(
+        order_entry_subscription = std::make_unique<archive::ArchiveSubscription>(
             archive::ArchiveSubscription::ArchiveSubscriptionParams {
                 .queue_params = message_transport::IpcQueue::IpcQueueParameters {
-                    .file_name = common.config.lookup("queue_name"),
-                    .queue_size = common.config.lookup("queue_name"),
-                    .is_writer = false
+                    .file_name = common.config.lookup(ORDER_ENTRY_QUEUE),
+                    .queue_size = DEFAULT_QUEUE_SIZE,
+                    .is_writer = false,
+                    .agent_name = AGENT_NAME
+                }
+            }
+        );
+
+        admin_publication = std::make_unique<archive::ArchivePublication>(
+            archive::ArchivePublication::ArchivePublicationParams {
+                .queue_params = message_transport::IpcQueue::IpcQueueParameters {
+                    .file_name = common.config.lookup(ADMIN_OUT_QUEUE),
+                    .queue_size = DEFAULT_QUEUE_SIZE,
+                    .is_writer = true,
+                    .agent_name = AGENT_NAME
+                }
+            }
+        );
+
+        admin_subscription = std::make_unique<archive::ArchiveSubscription>(
+            archive::ArchiveSubscription::ArchiveSubscriptionParams {
+                .queue_params = message_transport::IpcQueue::IpcQueueParameters {
+                    .file_name = common.config.lookup(ADMIN_IN_QUEUE),
+                    .queue_size = DEFAULT_QUEUE_SIZE,
+                    .is_writer = false,
+                    .agent_name = AGENT_NAME
                 }
             }
         );
     }
 
     void Ledger::run() {
-        subscription->poll([this](const uint8_t* data, size_t len) -> uint8_t {
+        order_entry_subscription->poll([this](const uint8_t* data, size_t len) -> uint8_t {
             const std::byte* as_bytes = reinterpret_cast<const std::byte*>(data);
             std::span<const std::byte> s {as_bytes, len};
             return static_cast<uint8_t>(this->on_fragment(s));
@@ -48,6 +73,10 @@ namespace ledger {
                 }
                 case (exchange::order::ReplaceOrder::sbeTemplateId()): {
                     process_replace_order(*reinterpret_cast<const exchange::order::ReplaceOrder*>(bytes.data()));
+                    break;
+                }
+                case (exchange::order::AgentStartup::sbeTemplateId()): {
+                    spdlog::warn("Unsupported templateID {}, dropping message", hdr->templateId());
                     break;
                 }
                 default: {

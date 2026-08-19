@@ -1,5 +1,6 @@
 
 import datetime
+from datetime import timezone
 import time
 from zoneinfo import ZoneInfo
 from typing import Dict, List
@@ -15,16 +16,18 @@ class OpenCloseAgent(AlpacaAgent):
         self.cash = initial_cash
         self.positions: Dict[str, int] = {}
         self.latest_price: Dict[str, (int, int)] = {}
+        self.is_open = False
 
     def execute_strategy(self, epoch_sec: float):
         self._update_market_data()
-        now = datetime.datetime.now(tz=ZoneInfo("America/New_York"))
-
-        if now.weekday() < 5 and now.hour == 8 and now.minute == 30:
+        now = datetime.datetime.fromtimestamp(epoch_sec, tz=ZoneInfo("America/New_York"))
+        if now.weekday() < 5 and now.hour == 8 and now.minute == 30 and now.second == 0 and not self.is_open:
             self._on_open()
+            self.is_open = True
 
-        elif now.weekday() < 5 and now.hour == 16 and now.minute == 00:
+        elif now.weekday() < 5 and now.hour == 16 and now.minute == 00 and now.second == 0 and self.is_open:
             self._on_close()
+            self.is_open = False
 
     def teardown(self):
         return super().teardown()

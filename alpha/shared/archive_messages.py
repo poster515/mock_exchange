@@ -15,8 +15,9 @@ class MessageHeader(Structure):
         ("templateId",  c_uint16),
         ("schemaId",    c_uint16),
         ("version",     c_uint16),
+        ("timestamp",   c_uint64),
+        ("srcAgentId",  c_uint64),
     ]
-
 
 # =============================================================================
 # Enums
@@ -99,9 +100,10 @@ class AgentShutdown(Structure):
     _layout_ = "ms"
     _pack_ = 1
     _fields_ = [
-        ("header",      MessageHeader),
-        ("agentName",   c_char * 32),
-        ("reason",      c_char * 32),
+        ("header",          MessageHeader),
+        ("destAgentId",     c_uint64),
+        ("destAgentName",   c_char * 64),
+        ("reason",          c_char * 32),
     ]
 
 class AllAgentsShutdown(Structure):
@@ -111,6 +113,29 @@ class AllAgentsShutdown(Structure):
     _fields_ = [
         ("header",      MessageHeader),
         ("reason",      c_char * 32),
+    ]
+
+# originating agent leaves agentID in header blank
+class AgentStartup(Structure):
+    TEMPLATE_ID = 103
+    _layout_ = "ms"
+    _pack_ = 1
+    _fields_ = [
+        ("header",      MessageHeader),
+        ("srcAgentName", c_char * 64),      # so the admin controller can know who the sender is
+    ]
+
+# central controller sends this back, including new agent Id
+class AgentParams(Structure):
+    TEMPLATE_ID = 104
+    _layout_ = "ms"
+    _pack_ = 1
+    _fields_ = [
+        ("header",              MessageHeader),
+        ("agentId",             c_uint64),
+        ("total_cash",          c_int32),
+        ("total_loss_limit",    c_int32),   # how much you lose before we shut you down
+        ("total_notional",      c_int32),   # how much you can have outstanding
     ]
 
 

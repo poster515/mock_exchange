@@ -30,16 +30,15 @@ class DummyAgent(AlpacaAgent):
 
 def test_symbol_add():
     print("------------------- SYMBOL ADD --------------------")
-    dummy1 = DummyAgent("dummy1")
-    dummy2 = DummyAgent("dummy2")
 
-    dummy1.start()
+    dummy2 = DummyAgent("dummy2")
     dummy2.start()
 
     creation_time_sec = time.time()
 
     print("Attempting to write data to publication...")
-    admin_pub1: ArchivePublication = dummy1.admin_client.admin_publication
+
+    admin_pub1: ArchivePublication = ArchivePublication(ArchiveConstants.ADMIN_QUEUE, "dummy_admin_controller")
     with admin_pub1.publication_claim(NewSymbolAdd) as new_symbol:
         new_symbol.symbolName = b"AAPL"
         new_symbol.symbolId = 1234
@@ -63,9 +62,9 @@ def test_shutdown_signal():
     dummy2.start()
 
     print("Attempting to write data to publication...")
-    admin_pub1: ArchivePublication = dummy1.admin_client.admin_publication
+    admin_pub1: ArchivePublication = ArchivePublication(ArchiveConstants.ADMIN_QUEUE, "dummy_admin_controller")
     with admin_pub1.publication_claim(AgentShutdown) as shutdown:
-        shutdown.agentName = b"dummy1000"
+        shutdown.destAgentName = b"dummy1000"
         shutdown.reason = b"INVALID_AGENT"
 
     dummy2.execute_strategy(time.time())
@@ -73,9 +72,8 @@ def test_shutdown_signal():
     assert(dummy2.is_live)
     assert(dummy2.shutdown_reason == "")
 
-    admin_pub1: ArchivePublication = dummy1.admin_client.admin_publication
     with admin_pub1.publication_claim(AgentShutdown) as shutdown:
-        shutdown.agentName = b"dummy2"
+        shutdown.destAgentName = b"dummy2"
         shutdown.reason = b"INVALID_AGENT"
 
     dummy2.execute_strategy(time.time())
@@ -95,7 +93,7 @@ def test_shutdown_all_signal():
     dummy2.start()
 
     print("Attempting to write data to publication...")
-    admin_pub1: ArchivePublication = dummy1.admin_client.admin_publication
+    admin_pub1: ArchivePublication = ArchivePublication(ArchiveConstants.ADMIN_QUEUE, "dummy_admin_controller")
     with admin_pub1.publication_claim(AllAgentsShutdown) as shutdown:
         shutdown.reason = b"INVALID_AGENT"
 

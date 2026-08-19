@@ -24,15 +24,16 @@ class AlpacaAgent(BaseAgent):
 
         self._admin_client = AdminClient(self)
 
+        self._is_initialized = False
+
     def __del__(self):
-        self._admin_client.teardown()
         self.teardown()
 
     def start(self):
-        self.order_publication = ArchivePublication(ArchiveConstants.LEDGER_IN_QUEUE, super())
-        self.md_ctrl_publication = ArchivePublication(ArchiveConstants.MARKET_DATA_CTRL_RQST, super())
-        self.md_ctrl_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_CTRL_RESP, super())
-        self.md_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_QUEUE, super())
+        self.order_publication = ArchivePublication(ArchiveConstants.LEDGER_IN_QUEUE, super().name)
+        self.md_ctrl_publication = ArchivePublication(ArchiveConstants.MARKET_DATA_CTRL_RQST, super().name)
+        self.md_ctrl_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_CTRL_RESP, super().name)
+        self.md_subscription = ArchiveSubscription(ArchiveConstants.MARKET_DATA_QUEUE, super().name)
 
         self._admin_client.start()
 
@@ -45,12 +46,24 @@ class AlpacaAgent(BaseAgent):
     def admin_client(self):
         return self._admin_client
 
+    
+    @staticmethod
+    def close_handle(handle):
+        if handle is None:
+            return
+        if isinstance(handle, ArchiveSubscription):
+            handle.subscription_close()
+        elif isinstance(handle, ArchivePublication):
+            handle.publication_close()
+
     def teardown(self):
         """Teardown this agent, including cancelling any resting orders """
-        self.order_publication.publication_close()
-        self.md_ctrl_publication.publication_close()
-        self.md_ctrl_subscription.subscription_close()
-        self.md_subscription.subscription_close()
+        self.close_handle(self.order_publication)
+        self.close_handle(self.md_ctrl_publication)
+        self.close_handle(self.md_ctrl_subscription)
+        self.close_handle(self.md_subscription)
+
+        self._admin_client.teardown()
 
     def publish_order(self, signal: Optional[OrderRequest]) -> bool:
         if signal is None:

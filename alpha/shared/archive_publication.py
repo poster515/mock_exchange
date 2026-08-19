@@ -8,9 +8,9 @@ from alpha.shared.archive_buffer import ClaimedBuffer
 
 class ArchivePublication:
 
-    def __init__(self, shm_name: str, agent: BaseAgent, shm_size = ArchiveConstants.DEFAULT_QUEUE_SIZE):
+    def __init__(self, shm_name: str, agent_name: str, shm_size = ArchiveConstants.DEFAULT_QUEUE_SIZE):
         self.publication_handle = None
-        self.owning_agent: BaseAgent = agent
+        self.owning_agent_name: str = agent_name
         self.shm_size = shm_size
         self._file_name = os.path.join(ArchiveConstants.DEFAULT_SHM_PATH, shm_name)
 
@@ -27,7 +27,7 @@ class ArchivePublication:
         # first close any open publication we may already have
         self.publication_close()
 
-        agent_name = self.owning_agent.name
+        agent_name = self.owning_agent_name
         self.publication_handle = ArchiveConstants.archive_lib.archive_pub_create(self._file_name.encode("utf-8"), shm_size, agent_name.encode("utf-8"))
         print(f"python: got new publication handle {self.publication_handle} at file '{self._file_name}' for '{agent_name}'")
 

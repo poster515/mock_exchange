@@ -30,7 +30,7 @@ def test_archive_pub():
     dummy = DummyAgent("dummy")
     ArchiveConstants.archive_lib.archive_force_close("/test_archive".encode("utf-8"))
 
-    archive = ArchivePublication("test_archive", dummy)
+    archive = ArchivePublication("test_archive", dummy.name)
 
     with archive.publication_claim(NewOrderSingle) as order:
         order.orderId = 1234
@@ -44,7 +44,7 @@ def test_archive_sub():
     dummy = DummyAgent("dummy")
     print("inside archive sub test")
     ArchiveConstants.archive_lib.archive_force_close("/test_archive".encode("utf-8"))
-    archive = ArchiveSubscription("test_archive", dummy)
+    archive = ArchiveSubscription("test_archive", dummy.name)
 
 def test_archive_pub_and_sub():
     print("inside pub and sub test")
@@ -52,8 +52,8 @@ def test_archive_pub_and_sub():
     dummy2 = DummyAgent("dummy2")
     ArchiveConstants.archive_lib.archive_force_close("/test_archive".encode("utf-8"))
 
-    writer = ArchivePublication("test_archive", dummy)
-    reader = ArchiveSubscription("test_archive", dummy2)
+    writer = ArchivePublication("test_archive", dummy.name)
+    reader = ArchiveSubscription("test_archive", dummy2.name)
 
     with writer.publication_claim(NewOrderSingle) as order:
         order.orderId = 1234
@@ -95,13 +95,13 @@ def test_pub_sub_load():
     dummy2 = DummyAgent("dummy2")
     ArchiveConstants.archive_lib.archive_force_close("/test_archive".encode("utf-8"))
 
-    writer = ArchivePublication("test_archive", dummy)
-    reader = ArchiveSubscription("test_archive", dummy2)
+    writer = ArchivePublication("test_archive", dummy.name)
+    reader = ArchiveSubscription("test_archive", dummy2.name)
 
     NUM_MESSAGES: int = 1E4
 
     def buffer_writer(w: ArchivePublication, num_messages: int = NUM_MESSAGES):
-        print(f"Writer '{w.owning_agent.name}' writing {num_messages} messages to archive '{w.file_name}'")
+        print(f"Writer '{w.owning_agent_name}' writing {num_messages} messages to archive '{w.file_name}'")
 
         for i in range(0, int(num_messages)):
             with writer.publication_claim(NewOrderSingle) as order:
@@ -117,7 +117,7 @@ def test_pub_sub_load():
             time.sleep(0.001)
 
     def buffer_reader(r: ArchiveSubscription, num_messages: int = NUM_MESSAGES):
-        print(f"Writer '{r.owning_agent.name}' writing {num_messages} messages to archive '{r.file_name}'")
+        print(f"Writer '{r.owning_agent_name}' writing {num_messages} messages to archive '{r.file_name}'")
 
         def reader_callback(bytes, size) -> int:
             # print(f"Received {size} bytes from poll: {bytes}, total_received: {reader_callback.num_received}")
